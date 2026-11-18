@@ -1277,45 +1277,41 @@ if(new URLSearchParams(location.search).get('technikcheck')==='1'){if(document.r
  const FORM="https://drevil0815.github.io/dart-lions-fanwall/";
  const root=document.getElementById("fanwall-addon");
  const kicker=document.getElementById("fw-kicker"),name=document.getElementById("fw-name"),msg=document.getElementById("fw-message"),url=document.getElementById("fw-url"),photo=document.getElementById("fw-image"),qr=document.getElementById("fw-qr");
- const seen=new Set(),queue=[];
- let active=null,deadline=0,lastPromo=Date.now(),nextAllowed=Date.now()+12000;
- function highlightVisible(){return !!document.querySelector(".highlight-toast.show");}
- function hide(){root.classList.remove("fw-visible");photo.hidden=true;photo.removeAttribute("src");qr.hidden=true;active=null;deadline=0;}
- function show(item){
-  if(highlightVisible())return;
-  active=item;deadline=Date.now()+(item.promo?10000:item.image_url?12000:8000);
-  kicker.textContent=item.promo?"MITMACHEN":"GRÜSSE AUS DER FAN-WALL";
-  name.textContent=item.promo?"Dein Gruß in unserer Live-Arena":item.name;
-  msg.textContent=item.promo?"Schicke uns deinen Gruß – gerne auch mit Foto!":item.message;
-  url.textContent=item.promo?FORM:"";
-  qr.hidden=!item.promo;photo.hidden=!item.image_url||!!item.promo;
-  if(!photo.hidden){photo.src=item.image_url;photo.onerror=function(){photo.hidden=true;};}
-  root.classList.add("fw-visible");
+ const storageKey='dl-fanwall-seen-v1',seen=new Map(),pending=new Map();
+ try{for(const [id,expiry] of JSON.parse(sessionStorage.getItem(storageKey)||'[]'))if(expiry>Date.now())seen.set(id,expiry);}catch(e){}
+ let queue=[],active=null,loading=false,refreshing=false,lastPromo=Date.now(),nextAllowed=Date.now()+12000;
+ let lastFrame=performance.now();
+ function blocked(){return document.hidden||Array.from(document.querySelectorAll('.highlight-toast.show')).some(el=>getComputedStyle(el).display!=='none');}
+ function saveSeen(item){seen.set(item.id,Date.now()+300000);for(const [id,expiry] of seen)if(expiry<Date.now())seen.delete(id);try{sessionStorage.setItem(storageKey,JSON.stringify([...seen]));}catch(e){}}
+ function hide(){root.classList.remove('fw-visible');photo.hidden=true;photo.removeAttribute('src');qr.hidden=true;active=null;nextAllowed=Date.now()+1500;}
+ function valid(item){return item.expiry-performance.now()>item.duration+1500;}
+ async function confirm(item){if(pending.has(item.id))return;pending.set(item.id,item);await send(item);}
+ async function send(item){if(item.sending)return;if(performance.now()>=item.expiry){pending.delete(item.id);return;}item.sending=true;try{const res=await fetch(FEED,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({display_token:item.token}),cache:'no-store',keepalive:true});if(res.ok&&(await res.json()).success)pending.delete(item.id);else if([400,403].includes(res.status))pending.delete(item.id);}catch(e){console.warn('Fan-Wall: Bestätigung wird erneut versucht',e);}finally{item.sending=false;}}
+ async function show(item){loading=true;try{
+  if(item.image_url){const img=new Image();img.src=item.image_url;await Promise.race([img.decode(),new Promise((_,reject)=>setTimeout(()=>reject(Error('Bild-Timeout')),4000))]);}
+  if(blocked()||(!item.promo&&!valid(item)))return;
+  kicker.textContent=item.promo?'MITMACHEN':'GRÜSSE AUS DER FAN-WALL';
+  name.textContent=item.promo?'Dein Gruß in unserer Live-Arena':item.name;
+  msg.textContent=item.promo?'Schicke uns deinen Gruß – gerne auch mit Foto!':item.message;
+  url.textContent=item.promo?FORM:'';qr.hidden=!item.promo;photo.hidden=!item.image_url;
+  if(item.image_url)photo.src=item.image_url;
+  active={...item,elapsed:0};lastFrame=performance.now();root.classList.add('fw-visible');
+  if(item.promo)lastPromo=Date.now();else saveSeen(item);
+ }catch(e){console.warn('Fan-Wall: Foto nicht geladen',e);}finally{loading=false;}}
+ async function refresh(){if(refreshing)return;refreshing=true;const started=performance.now();try{
+  const res=await fetch(FEED,{cache:'no-store'});if(!res.ok)throw Error('HTTP '+res.status);const data=await res.json();if(!data.success||!Array.isArray(data.messages))return;
+  const server=Date.parse(data.server_time),received=performance.now();if(!Number.isFinite(server)){queue=[];return;}
+  queue=data.messages.filter(i=>i&&i.id&&!seen.has(i.id)&&i.id!==active?.id&&typeof i.display_token==='string').map(i=>({id:i.id,name:String(i.name||''),message:String(i.message||''),image_url:i.image_url||null,token:i.display_token,duration:i.image_url?12000:8000,expiry:received+Date.parse(i.expires_at)-server-(received-started)})).filter(valid);
+  if(active&&!active.promo){const latest=data.messages.find(i=>i.id===active.id);if(latest)active.expiry=Math.min(active.expiry,received+Date.parse(latest.expires_at)-server-(received-started));}
+ }catch(e){console.warn('Fan-Wall: Feed nicht erreichbar',e);}finally{refreshing=false;}}
+ function tick(){const now=performance.now(),delta=now-lastFrame;lastFrame=now;
+  if(active){if(blocked()||(!active.promo&&now>=active.expiry)||delta>1000||(active.image_url&&(!photo.complete||!photo.naturalWidth))){hide();return;}active.elapsed+=delta;if(active.elapsed>=active.duration){const item=active;hide();if(!item.promo)confirm(item);}return;}
+  if(blocked()||loading||Date.now()<nextAllowed)return;
+  if(Date.now()-lastPromo>=240000){show({promo:true,duration:10000});return;}
+  queue=queue.filter(i=>!seen.has(i.id)&&valid(i));if(queue.length)show(queue.shift());
  }
- async function refresh(){
-  try{
-   const res=await fetch(FEED,{cache:"no-store"});
-   if(!res.ok)throw Error("HTTP "+res.status);
-   const data=await res.json();
-   if(!data.success||!Array.isArray(data.messages))return;
-   for(const item of data.messages){
-    if(!item||!item.id||seen.has(item.id))continue;
-    seen.add(item.id);
-    queue.push({id:item.id,name:String(item.name||""),message:String(item.message||""),image_url:item.image_url||null});
-   }
-  }catch(err){console.warn("Fan-Wall: Feed nicht erreichbar",err);}
- }
- function tick(){
-  const now=Date.now();
-  if(highlightVisible()){if(active)hide();return;}
-  if(active){if(now>=deadline){hide();nextAllowed=now+1500;}return;}
-  if(now<nextAllowed)return;
-  if(now-lastPromo>=240000){lastPromo=now;show({promo:true});return;}
-  if(queue.length){show(queue.shift());}
- }
- const observer=new MutationObserver(function(){if(highlightVisible()&&active)hide();});
- observer.observe(document.body,{subtree:true,attributes:true,attributeFilter:["class"]});
- refresh();setInterval(refresh,15000);setInterval(tick,250);
+ document.addEventListener('visibilitychange',()=>{if(document.hidden&&active)hide();});
+ refresh();setInterval(refresh,15000);setInterval(tick,100);setInterval(()=>{for(const item of pending.values())send(item);},3000);
 })();
 </script>
 
@@ -1334,7 +1330,7 @@ if(new URLSearchParams(location.search).get('technikcheck')==='1'){if(document.r
 #arena-ads .ad-date{font-size:clamp(28px,4.4vw,74px);font-weight:950;color:#f4c45c}
 #arena-live-count{position:fixed;right:67px;bottom:22px;z-index:2147483638;color:#b4b4b4;font:12px system-ui,Arial,sans-serif;opacity:.65;pointer-events:none;font-variant-numeric:tabular-nums}
 @keyframes ad-appear{from{opacity:0;transform:scale(.975)}to{opacity:1;transform:scale(1)}}
-body.arena-ad-active #fanwall-addon,body.arena-ad-active #highlight-toast{display:none!important}
+body.arena-ad-active #highlight-toast{display:none!important}
 @media(prefers-reduced-motion:reduce){#arena-ads .ad-slide{animation:none}}
 </style>
 <div id="arena-ads" aria-label="Sponsor- und Turnierwerbung" aria-live="off"><div class="arena-idle-header"><div class="arena-idle-brand"><span class="arena-idle-kicker">DART LIONS GRÄFENBERG</span><strong>LIVE-ARENA</strong></div><div class="arena-idle-status"><span class="arena-idle-dot"></span><span>Aktuell keine Spiele live</span></div></div><div class="arena-idle-caption">Während der Spielpause: Unsere Partner und kommenden Veranstaltungen</div><div class="ad-slide" id="arena-ad-slide"></div><div class="ad-footer" id="arena-ad-footer"><span>DART LIONS GRÄFENBERG</span><span>GAME ON!</span></div></div>

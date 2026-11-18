@@ -483,7 +483,8 @@ function togglePresentation(force){
 // Die Taste B öffnet keine verborgenen Einstellungen mehr.
 document.getElementById('presentation')?.addEventListener('click',()=>togglePresentation());
 
-const demoMode=null; // Live-Betrieb ausschließlich
+const demoParam=new URLSearchParams(location.search).get("demo");
+const demoMode=({"1":"single","2":"single","4":"double","6":"competition","single":"single","double":"double","competition":"competition"})[demoParam] || null;
 const DEMO=!!demoMode;
 const manualIds=[];
 // Testveranstaltungen werden nicht automatisch aktiviert.
@@ -1024,7 +1025,9 @@ document.getElementById('event-picker-refresh').addEventListener('click',async()
 // Direktlink zu einer fest gewählten Paarung lässt sich ebenfalls speichern.
 if(DEMO){
  document.querySelector('.tag').textContent='DART LIONS GRÄFENBERG · DEMO';
- document.getElementById('demo-ribbon').style.display='block';
+ document.getElementById('demo-ribbon').hidden=false;
+ document.getElementById('demo-ribbon').textContent='DEMO – KEINE ECHTEN SPIELSTÄNDE';
+ document.getElementById('demo-ribbon').style.setProperty('display','block','important');
  byId('league-data').disabled=true;byId('league-data').title='In der Demo sind keine echten Ligadaten enthalten';
  loadDemo();
 }else{discover();if(!manualIds.length)setInterval(discover,60000);}

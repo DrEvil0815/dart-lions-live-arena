@@ -1470,7 +1470,7 @@ function draw(){
  }else if(item.kind==='custom'){
   const headline=String(item.headline??'').trim(),subtitle=String(item.subtitle??'').trim();
   const picture='<img class="ad-poster" src="'+safe(item.poster)+'" alt="'+safe(item.title)+'">';
-  slide.innerHTML=headline||subtitle?'<div class="ad-custom-content">'+(headline?'<div class="ad-custom-heading">'+safe(headline)+'</div>':'')+'<div class="ad-custom-picture">'+picture+'</div>'+(subtitle?'<div class="ad-custom-subtitle">'+safe(subtitle)+'</div>':'')+'</div>':picture;
+  slide.innerHTML=(headline?'<div class="ad-custom-heading">'+safe(headline)+'</div>':'')+picture+(subtitle?'<div class="ad-custom-subtitle">'+safe(subtitle)+'</div>':'');
   const img=slide.querySelector('img');
   img.addEventListener('error',()=>{if(current&&current.id===item.id){signedImages.delete(item.image_path);customAds=customAds.filter(a=>a.id!==item.id);rebuild();advance();}},{once:true});
  }else if(item.kind==='event'){

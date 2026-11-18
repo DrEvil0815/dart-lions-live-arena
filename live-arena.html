@@ -265,6 +265,28 @@ border-radius:12px!important;z-index:10!important;
 .al-click-game{cursor:pointer;border:1px solid transparent}.al-click-game:hover,.al-click-game:focus-visible{border-color:#f3c55c;outline:none}.al-match-link{float:right;color:#f3c55c}#arena-match-dialog{box-sizing:border-box;width:min(760px,94vw);max-height:88dvh;overflow:auto;background:#101827;color:#fff;border:1px solid #8d7244;border-radius:12px;padding:16px;z-index:2147483647}#arena-match-dialog::backdrop{background:#000b}.al-dialog-head{display:flex;justify-content:space-between;align-items:center;color:#f3c55c;margin-bottom:14px}.al-dialog-head button{background:#263345;color:white;border:1px solid #8d7244;border-radius:6px;padding:8px 12px;cursor:pointer}#arena-match-dialog .al-score{margin:12px 0}#arena-match-dialog h3{color:#f3c55c}.al-match-stat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:14px 0}.al-stat-card{background:#172030;border:1px solid #3f4a5b;border-radius:12px;padding:14px}.al-stat-card h4{margin:0 0 4px;color:#f3c55c;font-size:22px}.al-stat-card .al-stat-team{color:#aebace;font-size:12px;margin-bottom:10px}.al-stat-card dl{display:grid;grid-template-columns:1fr auto;gap:8px 12px;margin:0}.al-stat-card dt{color:#d4dbe7}.al-stat-card dd{margin:0;color:#fff;font-weight:800}.al-visit-wrap{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(240px,.85fr);gap:14px;align-items:start}.al-visit-table-wrap{min-width:0}.al-leg-sidecards{display:grid;gap:10px}.al-leg-sidecards .al-stat-card h4{font-size:18px}.al-leg-sidecards .al-stat-card{padding:12px}.al-leg-sidecards .al-stat-team{margin-bottom:8px}.al-visit-caption{color:#aebace;font-size:12px;margin:0 0 8px}.al-leg-summaryline{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin:10px 0 12px}.al-leg-summaryline .left,.al-leg-summaryline .right{font-size:14px;font-weight:800;color:#fff}.al-leg-summaryline .left{text-align:left}.al-leg-summaryline .right{text-align:right}.al-leg-summaryline .mid{color:#aebace;font-size:12px;text-align:center}.al-match-highlight-note{font-size:11px;color:#aebace}.al-match-highlight-note b{color:#f3c55c}@media(max-width:820px){.al-match-stat-grid,.al-visit-wrap{grid-template-columns:1fr}}
 #arena-match-dialog{width:min(1050px,94vw);margin:auto}#arena-match-dialog .al-scroll table,#arena-match-dialog .al-match-metrics{width:100%;border-collapse:collapse;font-size:14px;table-layout:fixed}#arena-match-dialog table th,#arena-match-dialog table td{padding:8px 5px;text-align:center;border-bottom:1px solid #344156;overflow-wrap:anywhere}#arena-match-dialog .al-match-metrics th[scope=row]{font-weight:500;color:#bdc9db;background:none}#arena-match-dialog .al-match-metrics td{font-weight:800;background:#172030}#arena-match-dialog .al-match-metrics td:first-child{color:#f3c55c}#arena-match-dialog .al-chart{background:#172030;border-radius:10px;padding:8px}#arena-match-dialog .al-chart svg{width:100%;display:block}#arena-match-dialog .al-leg-sidecards h4{font-size:16px}#arena-match-dialog .al-visit-wrap{margin-top:12px;grid-template-columns:minmax(0,1.5fr) minmax(200px,1fr)}@media(max-width:650px){#arena-match-dialog .al-visit-wrap{grid-template-columns:1fr}#arena-match-dialog .al-leg-sidecards{grid-template-columns:repeat(2,minmax(0,1fr))}#arena-match-dialog .al-stat-card{padding:8px}#arena-match-dialog .al-stat-card dl{font-size:12px;gap:5px}}
 </style>
+
+<style id="arena-board-fit-fix">
+/* Fit portraits and both player rows to the actual board area, not viewport height. */
+.projector .stage .game:not(.placeholder) .players{display:grid;grid-template-rows:repeat(2,minmax(0,1fr));flex:1 1 0;min-height:0;}
+.projector .stage .game .player{container-type:size;grid-template-rows:minmax(0,1fr);min-height:0;padding:4px 9px;align-items:center;}
+.projector .stage .event-section .game .player .portrait{height:100%!important;max-height:100%!important;width:auto!important;max-width:100%!important;aspect-ratio:4 / 5;justify-self:center;min-height:0;object-fit:cover!important;}
+@media(min-width:781px){
+.projector .stage .event-section .game .player{grid-template-columns:minmax(0, min(22%, 130px)) minmax(0,1fr) auto!important;}
+.projector .stage .event-section .game .player .pinfo{min-height:0;}
+@container (max-height: 76px){
+.projector .stage .game .player .pname{font-size:clamp(10px,22cqh,17px);line-height:1.1;}
+.projector .stage .game .player .psub{font-size:clamp(8px,14cqh,11px);line-height:1.1;margin-top:2px;}
+.projector .stage .game .player .stats{margin-top:2px;gap:3px;}
+.projector .stage .game .player .stat{padding:1px 3px;font-size:clamp(7px,12cqh,10px);line-height:1.1;}
+.projector .stage .game .player .stat b{font-size:inherit;}
+.projector .stage .game .player .legs{padding:2px 5px;min-width:30px;}
+.projector .stage .game .player .legval{font-size:clamp(15px,36cqh,27px);line-height:1;}
+.projector .stage .event-section .game .player .rest{font-size:clamp(18px,48cqh,36px)!important;line-height:1;}
+.projector .stage .game .player .tiny{font-size:8px;line-height:1.1;}
+}}
+@media(max-width:780px){.projector .stage .game:not(.placeholder) .players{grid-template-rows:repeat(2,minmax(95px,1fr));flex:auto;} .projector .stage .game .player{container-type:normal;min-height:95px;}.projector .stage .game .player .portrait{height:80px!important;}}
+</style>
 </head>
 <body class="projector mode-competition">
 <div class="shell">

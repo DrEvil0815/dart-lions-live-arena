@@ -1320,6 +1320,12 @@ if(new URLSearchParams(location.search).get('technikcheck')==='1'){if(document.r
 #arena-ads{position:fixed;inset:0;z-index:8000;background:radial-gradient(ellipse at 50% 30%,#332018 0%,#11131b 52%,#07090e 100%);color:#fff;display:none;align-items:center;justify-content:center;overflow:hidden;font-family:system-ui,Arial,sans-serif}
 #arena-ads.visible{display:flex}
 #arena-ads .ad-slide{width:min(92vw,1500px);height:90vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:clamp(12px,2.4vh,30px);animation:ad-appear .65s ease both}
+#arena-ads .ad-custom-content{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;min-height:0;gap:clamp(6px,1.5dvh,18px)}
+#arena-ads .ad-custom-heading,#arena-ads .ad-custom-subtitle{flex:0 0 auto;max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.2;text-align:center}
+#arena-ads .ad-custom-heading{font-size:clamp(16px,min(3.8vw,5dvh),56px);font-weight:900;color:#f4c45c}
+#arena-ads .ad-custom-subtitle{font-size:clamp(12px,min(2.3vw,3dvh),30px);font-weight:650;color:#fff}
+#arena-ads .ad-custom-picture{flex:1 1 0;min-height:0;width:100%;display:flex;align-items:center;justify-content:center}
+#arena-ads .ad-custom-picture img{display:block;width:100%;height:100%;object-fit:contain}
 #arena-ads .ad-eyebrow{color:#f4c45c;font-size:clamp(16px,2vw,29px);font-weight:850;letter-spacing:.12em;text-transform:uppercase}
 #arena-ads .ad-heading{font-size:clamp(30px,5.2vw,90px);font-weight:950;line-height:1.08;max-width:95%;overflow-wrap:anywhere}
 #arena-ads .ad-logo{display:block;max-width:min(74vw,1050px);max-height:54vh;width:auto;height:auto;object-fit:contain}
@@ -1371,7 +1377,7 @@ async function loadCustomAds(){
  if(adBusy||!visible)return;
  adBusy=true;adRefreshAt=Date.now();
  try{
-  const rows=await adFetch('/rest/v1/arena_ads?select=id,title,image_path,starts_at,ends_at,display_seconds,priority&order=id.asc');
+  const rows=await adFetch('/rest/v1/arena_ads?select=id,title,headline,subtitle,image_path,starts_at,ends_at,display_seconds,priority&order=id.asc');
   if(!Array.isArray(rows))throw Error('Ungültiger Werbe-Feed');
   const result=await Promise.all(rows.map(async a=>{
    try{
@@ -1449,7 +1455,7 @@ function rebuild(){
   const key=slideKey(current);
   // Identische Position bei unveränderter Rotation; sonst anhand Schlüssel finden.
   const match=slides[index]&&slideKey(slides[index])===key?index:slides.findIndex(a=>slideKey(a)===key);
-  if(match>=0){index=match;if(current.kind==='custom'){const fresh=slides[index];if(fresh.image_path!==current.image_path||!eligible(fresh)){slideUntil=0;}else current=fresh;}}
+  if(match>=0){index=match;if(current.kind==='custom'){const fresh=slides[index];if(fresh.image_path!==current.image_path||fresh.headline!==current.headline||fresh.subtitle!==current.subtitle||!eligible(fresh)){slideUntil=0;}else current=fresh;}}
   else{index=-1;slideUntil=0;}
  }else index=0;
 }
@@ -1462,7 +1468,9 @@ function draw(){
   const p=WERBEPARTNER[item.idx];
   slide.innerHTML='<div class="ad-eyebrow">UNSERE WERBEPARTNER</div><img class="ad-logo" alt="'+safe(p.name)+'" src="'+safe(p.logo)+'"><div class="ad-sub">'+safe(p.name)+'</div><div class="ad-line"></div><div class="ad-eyebrow">DANKE FÜR EURE UNTERSTÜTZUNG!</div>';
  }else if(item.kind==='custom'){
-  slide.innerHTML='<img class="ad-poster" src="'+safe(item.poster)+'" alt="'+safe(item.title)+'">';
+  const headline=String(item.headline??'').trim(),subtitle=String(item.subtitle??'').trim();
+  const picture='<img class="ad-poster" src="'+safe(item.poster)+'" alt="'+safe(item.title)+'">';
+  slide.innerHTML=headline||subtitle?'<div class="ad-custom-content">'+(headline?'<div class="ad-custom-heading">'+safe(headline)+'</div>':'')+'<div class="ad-custom-picture">'+picture+'</div>'+(subtitle?'<div class="ad-custom-subtitle">'+safe(subtitle)+'</div>':'')+'</div>':picture;
   const img=slide.querySelector('img');
   img.addEventListener('error',()=>{if(current&&current.id===item.id){signedImages.delete(item.image_path);customAds=customAds.filter(a=>a.id!==item.id);rebuild();advance();}},{once:true});
  }else if(item.kind==='event'){

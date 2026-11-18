@@ -1356,6 +1356,47 @@ const date=v=>v.slice(8,10)+'.'+v.slice(5,7)+'.'+v.slice(0,4);
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Berlin',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const preview=new URLSearchParams(location.search).get('werbevollbild')==='1';
 let entries=fallback,slides=[],index=0,visible=false;
+// Eigene Werbebilder: getrennt von Fanwall und Zuschauersitzungen.
+const AD_BASE='https://lugyxehsiwzipuczcvzc.supabase.co';
+const AD_KEY='sb_publishable_OHknyyF6x9lm_KIqO76rKw_pJGvOmTA';
+let customAds=[],adBusy=false,adRefreshAt=0,slideUntil=0,current=null;
+const signedImages=new Map();
+const eligible=a=>Date.parse(a.starts_at)<=Date.now()&&(!a.ends_at||Date.parse(a.ends_at)>Date.now())&&a.urlUntil>Date.now()+1000;
+async function adFetch(path,options={}){
+ const response=await fetch(AD_BASE+path,{...options,cache:'no-store',headers:{apikey:AD_KEY,...options.headers},signal:AbortSignal.timeout(10000)});
+ if(!response.ok)throw Error('HTTP '+response.status);
+ return response.json();
+}
+async function loadCustomAds(){
+ if(adBusy||!visible)return;
+ adBusy=true;adRefreshAt=Date.now();
+ try{
+  const rows=await adFetch('/rest/v1/arena_ads?select=id,title,image_path,starts_at,ends_at,display_seconds,priority&order=id.asc');
+  if(!Array.isArray(rows))throw Error('Ungültiger Werbe-Feed');
+  const result=await Promise.all(rows.map(async a=>{
+   try{
+    let cached=signedImages.get(a.image_path);
+    if(!cached||cached.urlUntil<Date.now()+150000){
+     const path=a.image_path.split('/').map(encodeURIComponent).join('/');
+     const started=Date.now();
+     const data=await adFetch('/storage/v1/object/sign/arena-ads/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({expiresIn:300})});
+     const relative=data.signedURL||data.signedUrl;
+     if(typeof relative!=='string')throw Error('Keine Bild-URL');
+     const url=new URL(relative.startsWith('/object/')?'/storage/v1'+relative:relative,AD_BASE);
+     if(url.origin!==AD_BASE)throw Error('Ungültige Bild-URL');
+     cached={poster:url.href,urlUntil:started+300000};signedImages.set(a.image_path,cached);
+    }
+    return {...a,...cached,kind:'custom'};
+   }catch(e){console.warn('Werbebild nicht verfügbar',e);return null;}
+  }));
+  customAds=result.filter(Boolean);
+  for(const key of signedImages.keys())if(!rows.some(a=>a.image_path===key))signedImages.delete(key);
+  rebuild();
+ }catch(e){console.warn('Eigene Werbung: Feed nicht erreichbar',e);customAds=[];rebuild();}
+ finally{adBusy=false;}
+}
+function slideKey(a){return a.kind==='custom'?'custom:'+a.id:a.kind==='sponsor'?'sponsor:'+a.idx:a.kind==='event'?'event:'+a.date+':'+a.title:'empty';}
+
 // Plakate im Hintergrund laden, damit die Werbefolie nicht erst beim Wechsel wartet.
 const posterCache=new Map();
 function preloadPosters(items){
@@ -1392,16 +1433,38 @@ function rebuild(){
   if(tournaments.length&&(i+1)%2===0){slides.push({kind:'event',...tournaments[tournamentIndex%tournaments.length]});tournamentIndex++;}
  }
  if(tournaments.length&&regular.length%2!==0)slides.push({kind:'event',...tournaments[tournamentIndex%tournaments.length]});
+ // Priorität 1–5 entspricht der Anzahl der Einblendungen pro Rotation.
+ const own=customAds.filter(eligible);
+ const weighted=[];
+ for(let round=1;round<=5;round++)for(const a of own)if(a.priority>=round)weighted.push(a);
+ const base=slides.slice();slides=[];
+ const count=Math.max(base.length,weighted.length);
+ for(let i=0;i<count;i++){
+  if(i<base.length)slides.push(base[i]);
+  if(i<weighted.length)slides.push(weighted[i]);
+ }
  if(!slides.length)slides=[{kind:'empty'}];
  preloadPosters(upcoming);
- index%=slides.length;if(visible)draw();
+ if(current){
+  const key=slideKey(current);
+  // Identische Position bei unveränderter Rotation; sonst anhand Schlüssel finden.
+  const match=slides[index]&&slideKey(slides[index])===key?index:slides.findIndex(a=>slideKey(a)===key);
+  if(match>=0){index=match;if(current.kind==='custom'){const fresh=slides[index];if(fresh.image_path!==current.image_path||!eligible(fresh)){slideUntil=0;}else current=fresh;}}
+  else{index=-1;slideUntil=0;}
+ }else index=0;
 }
 function draw(){
  const item=slides[index];if(!item)return;
+ current=item;
+ slideUntil=Date.now()+(item.kind==='custom'?Math.max(5,Math.min(120,Number(item.display_seconds)||15))*1000:15000);
  footer.style.display=item.poster?'none':'flex';
  if(item.kind==='sponsor'){
   const p=WERBEPARTNER[item.idx];
   slide.innerHTML='<div class="ad-eyebrow">UNSERE WERBEPARTNER</div><img class="ad-logo" alt="'+safe(p.name)+'" src="'+safe(p.logo)+'"><div class="ad-sub">'+safe(p.name)+'</div><div class="ad-line"></div><div class="ad-eyebrow">DANKE FÜR EURE UNTERSTÜTZUNG!</div>';
+ }else if(item.kind==='custom'){
+  slide.innerHTML='<img class="ad-poster" src="'+safe(item.poster)+'" alt="'+safe(item.title)+'">';
+  const img=slide.querySelector('img');
+  img.addEventListener('error',()=>{if(current&&current.id===item.id){signedImages.delete(item.image_path);customAds=customAds.filter(a=>a.id!==item.id);rebuild();advance();}},{once:true});
  }else if(item.kind==='event'){
   const text='<div class="ad-eyebrow">DART LIONS · TERMINE</div><div class="ad-line"></div><div class="ad-heading">'+safe(item.title)+'</div><div class="ad-date">'+date(item.date)+(item.end_date&&item.end_date!==item.date?' – '+date(item.end_date):'')+'</div><div class="ad-sub">'+safe(item.time||'')+'</div>';
   if(item.poster&&/^https:\/\//.test(item.poster)){
@@ -1418,8 +1481,26 @@ async function load(){
  }catch(e){console.warn('Öffentliche Termine: Feed nicht erreichbar, verwende vorläufige Termine',e);rebuild();}
 }
 function shouldShow(){if(preview)return true;if(typeof DEMO!=='undefined'&&DEMO)return false;return typeof events!=='undefined'&&Array.isArray(events)&&events.length===0;}
-function update(){const next=shouldShow();if(next!==visible){visible=next;ads.classList.toggle('visible',next);document.body.classList.toggle('arena-ad-active',next);if(next)draw();}}
-rebuild();load();setInterval(load,300000);setInterval(()=>{if(visible){index=(index+1)%slides.length;draw();}},15000);setInterval(update,1000);update();
+function advance(){
+ if(!visible)return;
+ for(let n=0;n<slides.length;n++){
+  index=(index+1)%slides.length;
+  if(slides[index].kind!=='custom'||eligible(slides[index])){draw();return;}
+ }
+ current=null;slideUntil=Date.now()+15000;slide.innerHTML='<div class="ad-heading">DART LIONS GRÄFENBERG</div>';
+}
+function update(){
+ const next=shouldShow();
+ if(next!==visible){
+  visible=next;ads.classList.toggle('visible',next);document.body.classList.toggle('arena-ad-active',next);
+  current=null;index=0;
+  if(next){rebuild();draw();loadCustomAds();}
+ }
+ if(!visible)return;
+ if(Date.now()-adRefreshAt>=30000)loadCustomAds();
+ if((current&&current.kind==='custom'&&!eligible(current))||Date.now()>=slideUntil)advance();
+}
+rebuild();load();setInterval(load,300000);setInterval(update,250);update();
 // Zuschauerzähler: nur echte Arena-Sitzungen, kein Demomodus.
 const counter=document.getElementById('arena-live-count');
 if(typeof DEMO==='undefined'||!DEMO){

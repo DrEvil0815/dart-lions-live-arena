@@ -1088,9 +1088,18 @@ function arenaCaptureVisits(eventId,infos){
  if(changed&&!arenaLeagueTest)try{localStorage.setItem('dl-match-visits-v1:'+eventId,JSON.stringify(store));}catch{}
 }
 function arenaVisitHTML(eventId,g){
- const store=arenaVisitStore(eventId),rec=store[g.gameId]||store[g.id];if(!rec)return '';
- const legs=Object.entries(rec.legs||{}).filter(([_,l])=>l.visits?.length||l.winner).sort((a,b)=>Number(a[0])-Number(b[0]));if(!legs.length)return '';
- const fmt=x=>safe(x);return '<h3>Legverlauf · beobachtete Aufnahmen</h3><p class="al-note">Lokal beobachtete Scoreänderungen, keine vollständige Spielhistorie. Fehlende Aufnahmen, Nuller, Busts und Dartanzahlen werden nicht ergänzt.</p>'+legs.map(([n,l])=>`<details class="al-leg-detail" data-leg="${fmt(n)}"><summary>Leg ${fmt(n)}${l.winner?' · Sieger: '+fmt(l.winner):''} · ${l.visits.length} beobachtete Aufnahmen</summary>${l.visits.length?'<div class="al-scroll"><table><thead><tr><th>Spieler</th><th>Score</th><th>Rest</th></tr></thead><tbody>'+l.visits.map(v=>'<tr><td>'+fmt(v.name)+'</td><td'+(v.score===180?' class="al-visit-highlight"':'')+'>'+fmt(v.score)+'</td><td>'+fmt(v.rest)+'</td></tr>').join('')+'</tbody></table></div>':''}</details>`).join('');
+ const store=arenaVisitStore(eventId),rec=store[g.gameId]||store[g.id];
+ const demo=arenaLeagueTest&&qs.get('leg-demo')==='1';
+ const legs={...(rec?.legs||{})};
+ if(demo){ // Isolierte Beispieldaten, niemals speichern oder in Highlights übernehmen.
+  const scores=[[100,60],[60,100],[140,45],[60,60],[81,100],[60,40]];
+  let rest=[501,501];const visits=[];for(const pair of scores){for(let i=0;i<2;i++){if(rest[0]===0||rest[1]===0)break;const score=pair[i];rest[i]-=score;visits.push({side:i+1,name:i?'Demo Gast':'Demo Heim',score,rest:rest[i],darts:3});}}
+  legs[1]={visits,winner:'Demo Heim',demo:true};
+ }
+ const count=g.done?Number(g.h)+Number(g.v):g.active?Number(g.active.spieler1Legs||0)+Number(g.active.spieler2Legs||0)+1:0;
+ const nums=[...new Set([...Array.from({length:Math.min(50,Math.max(0,count||0))},(_,i)=>i+1),...Object.keys(legs).map(Number)])].sort((a,b)=>a-b);
+ const fmt=x=>safe(x);const avg=(l,side)=>{const v=l.visits.filter(x=>x.side===side);if(!v.length||!l.demo||!v.every(x=>Number.isInteger(x.darts)&&x.darts>0))return '–';return (3*v.reduce((a,x)=>a+x.score,0)/v.reduce((a,x)=>a+x.darts,0)).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});};
+ return '<h3>Matchanalyse · Legs und Aufnahmen</h3>'+(demo?'<p class="al-note" style="color:#f3c55c">DEMO: Leg 1 enthält ausschließlich fiktive Aufnahmen und Leg-AVG, keine echten Matchdaten.</p>':'<p class="al-note">Historische Aufnahmen sind in den vorliegenden Daten nicht enthalten. Live werden beobachtete Scoreänderungen angezeigt. Leg-AVG erst bei vollständigen Aufnahmen und bekannten Dartanzahlen.</p>')+(nums.length?nums.map(n=>{const l=legs[n]||{visits:[]};const v=l.visits||[];const sides=[1,2].map(i=>v.filter(x=>x.side===(l.demo?i:g.swap?3-i:i)));const rows=Array.from({length:Math.max(sides[0].length,sides[1].length)},(_,i)=>{const a=sides[0][i],b=sides[1][i];const cell=(x,k)=>x?fmt(x[k]):'–';return `<tr><td>${cell(a,'score')}</td><td>${cell(a,'rest')}</td><td>${i+1}</td><td>${cell(b,'rest')}</td><td>${cell(b,'score')}</td></tr>`;}).join('');return `<details class="al-leg-detail" data-leg="${n}"><summary>Leg ${n}${l.winner?' · Sieger: '+fmt(l.winner):''}${l.demo?' · DEMO':''}</summary><div class="al-metrics"><div><strong>${avg(l,1)}</strong><span>Leg-AVG</span><strong>${avg(l,2)}</strong></div></div>${v.length?'<div class="al-scroll"><table><thead><tr><th colspan="2">'+fmt(l.demo?'Demo Heim':g.home?.name||'Heim')+'</th><th></th><th colspan="2">'+fmt(l.demo?'Demo Gast':g.away?.name||'Gast')+'</th></tr><tr><th>Score</th><th>Rest</th><th>Beob. Aufnahme</th><th>Rest</th><th>Score</th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<p class="al-note">Keine Aufnahmedaten vorhanden.</p>'}</details>`;}).join(''):'<p class="al-note">Noch keine Legs verfügbar.</p>');
 }
 
 function arenaCaptureMatchHighlights(eventId,infos){
@@ -1180,8 +1189,9 @@ function arenaLeagueUI(){
  if(!games.length)html+='<p class="al-note">Noch keine Spielpaarungen verfügbar.</p>';
 
  }else{
- const high=[];for(const s of rows){if(s._180er>0)high.push([180,s.p,`${s._180er} × 180er`]);for(const x of s.highfinishes||[])high.push([x,s.p,'Highfinish']);for(const [x,n] of Object.entries(s.best||{}))if(+x<=18&&n>0)high.push([x,s.p,`${n} × Shortleg`]);const hs=(s.highscores||[]).filter(x=>x<180);if(hs.length&&Math.max(...hs)>=140)high.push([Math.max(...hs),s.p,'Bester Score unter 180']);}
- html=high.length?high.map(([n,p,t])=>`<div class="al-highlight"><strong>${val(n)}</strong><div>${name(p)}<small>${safe(t)} · ${safe(p.heimmannschaft?m.mannschaftHeim:m.mannschaftGast)}</small></div></div>`).join(''):'<p>Noch keine Highlights erfasst.</p>';
+ const categories=[['180er',[]],['Highfinishes',[]],['Shortlegs',[]]];
+ for(const s of rows){if(s._180er>0)categories[0][1].push([180,s.p,`${s._180er} × 180er`]);for(const x of s.highfinishes||[])if(x>=100)categories[1][1].push([x,s.p,'Highfinish']);for(const [x,n] of Object.entries(s.best||{}))if(+x>0&&+x<=18&&n>0)categories[2][1].push([+x,s.p,`${n} × Shortleg`]);}
+ html=categories.map(([title,items],i)=>`<section class="al-pair-block"><h3>${title}</h3>${items.length?items.sort((a,b)=>i===2?a[0]-b[0]:b[0]-a[0]).map(([n,p,t])=>`<div class="al-highlight"><strong>${val(n)}</strong><div>${name(p)}<small>${safe(t)} · ${safe(p.heimmannschaft?m.mannschaftHeim:m.mannschaftGast)}</small></div></div>`).join(''):'<p class="al-note">Keine erfasst.</p>'}</section>`).join('');
  }
  const result=header+html;if(content.dataset.last!==result){content.innerHTML=result;content.dataset.last=result;}
 }
@@ -1211,9 +1221,9 @@ function arenaDrawMatch(){
  const hi=arenaGameHighlights(e.id,g,model.rows,model.games);
  const note=g.done&&snap&&!snap.abgeschlossen?'Letzter gespeicherter Live-Stand; Wurfstatistik möglicherweise unvollständig.': 'Nicht verfügbare Matchwerte werden als – angezeigt. Keine Spieltagswerte aus mehreren Partien.';
  const body=arenaMatchDialog.querySelector('.al-dialog-content');const opened=[...body.querySelectorAll('details[open]')].map(x=>x.dataset.leg);const markup=`<p class="al-note">Block ${safe(g.bereich)} · Spiel ${safe(g.counter)} · ${g.type==='DP'?'Doppel':'Einzel'} · ${g.done?'Beendet':g.active?'Live':'Offen'}</p><div class="al-score"><div>${safe(g.home?.name||'Noch offen')}</div><strong>${score}</strong><div>${safe(g.away?.name||'Noch offen')}</div></div><div class="al-metrics">${labels.map((k,i)=>h[i]==null&&v[i]==null?'':`<div><strong>${fmt(h[i])}</strong><span>${k}</span><strong>${fmt(v[i])}</strong></div>`).join('')}</div>${hi.length?'<h3>🏆 Highlights</h3>'+hi.map(x=>'<p>'+safe(x)+'</p>').join(''):''}<p class="al-note">${note}</p>${arenaVisitHTML(e.id,g)}`;
- if(body.dataset.last!==markup){body.innerHTML=markup;body.dataset.last=markup;for(const el of body.querySelectorAll('details'))el.open=opened.includes(el.dataset.leg);}
+ if(body.dataset.last!==markup){body.innerHTML=markup;body.dataset.last=markup;for(const el of body.querySelectorAll('details'))el.open=opened.includes(el.dataset.leg)||(!body.dataset.legInitialized&&el.dataset.leg==='1');body.dataset.legInitialized='1';}
 }
-function arenaShowMatch(ev){const el=ev.target.closest('[data-match-id]');if(!el)return;arenaOpenMatch={eventId:arenaLeagueId,id:el.dataset.matchId};arenaDrawMatch();if(!arenaMatchDialog.open)arenaMatchDialog.showModal();}
+function arenaShowMatch(ev){const el=ev.target.closest('[data-match-id]');if(!el)return;arenaOpenMatch={eventId:arenaLeagueId,id:el.dataset.matchId};const body=arenaMatchDialog.querySelector('.al-dialog-content');body.innerHTML='';delete body.dataset.last;delete body.dataset.legInitialized;arenaDrawMatch();if(!arenaMatchDialog.open)arenaMatchDialog.showModal();}
 byId('arena-league-content').addEventListener('click',arenaShowMatch);
 byId('arena-league-content').addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();arenaShowMatch(ev);}});
 setInterval(()=>{if(arenaMatchDialog.open)arenaDrawMatch();},2000);

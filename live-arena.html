@@ -1328,7 +1328,7 @@ if(new URLSearchParams(location.search).get('technikcheck')==='1'){if(document.r
 #arena-ads .ad-footer{position:absolute;bottom:2vh;left:4vw;right:4vw;display:flex;align-items:center;justify-content:space-between;gap:18px;color:#f4c45c;font-size:clamp(12px,1.5vw,22px);font-weight:800;letter-spacing:.07em;pointer-events:none}
 #arena-ads .ad-line{height:4px;width:min(420px,55vw);background:linear-gradient(90deg,#9e1f28,#e4ad46,#9e1f28);border-radius:4px}
 #arena-ads .ad-date{font-size:clamp(28px,4.4vw,74px);font-weight:950;color:#f4c45c}
-#arena-live-count{position:fixed;right:67px;bottom:22px;z-index:2147483638;color:#b4b4b4;font:12px system-ui,Arial,sans-serif;opacity:.65;pointer-events:none;font-variant-numeric:tabular-nums}
+#arena-live-count{position:fixed;left:12px;bottom:12px;z-index:2147483638;color:#b4b4b4;font:12px system-ui,Arial,sans-serif;opacity:.65;pointer-events:none;font-variant-numeric:tabular-nums}
 @keyframes ad-appear{from{opacity:0;transform:scale(.975)}to{opacity:1;transform:scale(1)}}
 body.arena-ad-active #highlight-toast{display:none!important}
 @media(prefers-reduced-motion:reduce){#arena-ads .ad-slide{animation:none}}
@@ -1340,7 +1340,7 @@ body.arena-ad-active #highlight-toast{display:none!important}
 'use strict';
 const ads=document.getElementById('arena-ads'),slide=document.getElementById('arena-ad-slide'),footer=document.getElementById('arena-ad-footer');
 const FEED='./arena-events.json';
-const VIEWERS='https://lugyxehsiwzipuczcvzc.supabase.co/functions/v1/live-viewers';
+const VIEWERS='https://lugyxehsiwzipuczcvzc.supabase.co/functions/v1/arena-viewers';
 const POSTER='https://www.holdsport.dk/media/W1siZiIsIjIwMjYvMTEvMTMvM2FsYWJucTYzMF8xLl9Hcl9mZW5iZXJnZXJfRGFydHNfT3Blbl8xLnBuZyJdXQ/1.%20Gr%C3%A4fenberger%20Darts%20Open%201.png?sha=2c2b2fa6931aae05';
 const fallback=[
 {title:'Dart Lions I – DSG Langensendelbach/Marloffstein II',date:'2026-11-20',time:'20:00'},
@@ -1420,18 +1420,28 @@ async function load(){
 function shouldShow(){if(preview)return true;if(typeof DEMO!=='undefined'&&DEMO)return false;return typeof events!=='undefined'&&Array.isArray(events)&&events.length===0;}
 function update(){const next=shouldShow();if(next!==visible){visible=next;ads.classList.toggle('visible',next);document.body.classList.toggle('arena-ad-active',next);if(next)draw();}}
 rebuild();load();setInterval(load,300000);setInterval(()=>{if(visible){index=(index+1)%slides.length;draw();}},15000);setInterval(update,1000);update();
-// Genuine viewer count. Hidden if the server function is not yet deployed.
+// Zuschauerzähler: nur echte Arena-Sitzungen, kein Demomodus.
 const counter=document.getElementById('arena-live-count');
-let id='';try{id=sessionStorage.getItem('arena-viewer-session')||crypto.randomUUID();sessionStorage.setItem('arena-viewer-session',id);}catch(e){if(crypto.randomUUID)id=crypto.randomUUID();}
-async function beat(){
- if(!id||document.hidden)return;
- try{
-  const res=await fetch(VIEWERS,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:id}),cache:'no-store'});
-  if(!res.ok)throw Error('HTTP '+res.status);const data=await res.json();if(!Number.isInteger(data.count)||data.count<0)throw Error('Invalid count');
-  counter.textContent=String(data.count);counter.hidden=false;
- }catch(e){counter.hidden=true;}
+if(typeof DEMO==='undefined'||!DEMO){
+ let id='';
+ try{id=sessionStorage.getItem('arena-viewer-session')||crypto.randomUUID();sessionStorage.setItem('arena-viewer-session',id);}catch(e){try{id=crypto.randomUUID();}catch{}}
+ let busy=false;
+ async function beat(){
+  if(!id||document.hidden||busy)return;
+  busy=true;
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),10000);
+  try{
+   const res=await fetch(VIEWERS,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session_id:id}),cache:'no-store',signal:controller.signal});
+   if(!res.ok)throw Error('HTTP '+res.status);
+   const data=await res.json();
+   if(data.success!==true||!Number.isInteger(data.viewers)||data.viewers<0)throw Error('Invalid count');
+   counter.textContent=String(data.viewers);counter.hidden=document.hidden;
+  }catch(e){counter.hidden=true;}finally{clearTimeout(timeout);busy=false;}
+ }
+ beat();setInterval(beat,30000);
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)counter.hidden=true;else beat();});
 }
-beat();setInterval(beat,25000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)beat();});
 })();
 </script>
 

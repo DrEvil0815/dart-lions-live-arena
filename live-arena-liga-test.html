@@ -263,6 +263,7 @@ border-radius:12px!important;z-index:10!important;
 .al-pair-block{margin:12px 0 18px}.al-pair-block h3{display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:1px solid #78603b;padding-bottom:6px}.al-pair-block h3 span{font-size:12px;color:#c4bba8;font-weight:600}.al-trophy{font-size:16px;margin-left:6px}.al-match-highlight{display:flex;flex-wrap:wrap;gap:5px 12px;color:#f3c55c;font-size:12px;margin-top:7px;border-top:1px solid #55452e;padding-top:5px}.al-match-highlight span{overflow-wrap:anywhere}
 
 .al-click-game{cursor:pointer;border:1px solid transparent}.al-click-game:hover,.al-click-game:focus-visible{border-color:#f3c55c;outline:none}.al-match-link{float:right;color:#f3c55c}#arena-match-dialog{box-sizing:border-box;width:min(760px,94vw);max-height:88dvh;overflow:auto;background:#101827;color:#fff;border:1px solid #8d7244;border-radius:12px;padding:16px;z-index:2147483647}#arena-match-dialog::backdrop{background:#000b}.al-dialog-head{display:flex;justify-content:space-between;align-items:center;color:#f3c55c;margin-bottom:14px}.al-dialog-head button{background:#263345;color:white;border:1px solid #8d7244;border-radius:6px;padding:8px 12px;cursor:pointer}#arena-match-dialog .al-score{margin:12px 0}#arena-match-dialog h3{color:#f3c55c}.al-match-stat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:14px 0}.al-stat-card{background:#172030;border:1px solid #3f4a5b;border-radius:12px;padding:14px}.al-stat-card h4{margin:0 0 4px;color:#f3c55c;font-size:22px}.al-stat-card .al-stat-team{color:#aebace;font-size:12px;margin-bottom:10px}.al-stat-card dl{display:grid;grid-template-columns:1fr auto;gap:8px 12px;margin:0}.al-stat-card dt{color:#d4dbe7}.al-stat-card dd{margin:0;color:#fff;font-weight:800}.al-visit-wrap{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(240px,.85fr);gap:14px;align-items:start}.al-visit-table-wrap{min-width:0}.al-leg-sidecards{display:grid;gap:10px}.al-leg-sidecards .al-stat-card h4{font-size:18px}.al-leg-sidecards .al-stat-card{padding:12px}.al-leg-sidecards .al-stat-team{margin-bottom:8px}.al-visit-caption{color:#aebace;font-size:12px;margin:0 0 8px}.al-leg-summaryline{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;margin:10px 0 12px}.al-leg-summaryline .left,.al-leg-summaryline .right{font-size:14px;font-weight:800;color:#fff}.al-leg-summaryline .left{text-align:left}.al-leg-summaryline .right{text-align:right}.al-leg-summaryline .mid{color:#aebace;font-size:12px;text-align:center}.al-match-highlight-note{font-size:11px;color:#aebace}.al-match-highlight-note b{color:#f3c55c}@media(max-width:820px){.al-match-stat-grid,.al-visit-wrap{grid-template-columns:1fr}}
+#arena-match-dialog{width:min(1050px,94vw);margin:auto}#arena-match-dialog .al-scroll table,#arena-match-dialog .al-match-metrics{width:100%;border-collapse:collapse;font-size:14px;table-layout:fixed}#arena-match-dialog table th,#arena-match-dialog table td{padding:8px 5px;text-align:center;border-bottom:1px solid #344156;overflow-wrap:anywhere}#arena-match-dialog .al-match-metrics th[scope=row]{font-weight:500;color:#bdc9db;background:none}#arena-match-dialog .al-match-metrics td{font-weight:800;background:#172030}#arena-match-dialog .al-match-metrics td:first-child{color:#f3c55c}#arena-match-dialog .al-chart{background:#172030;border-radius:10px;padding:8px}#arena-match-dialog .al-chart svg{width:100%;display:block}#arena-match-dialog .al-leg-sidecards h4{font-size:16px}#arena-match-dialog .al-visit-wrap{margin-top:12px;grid-template-columns:minmax(0,1.5fr) minmax(200px,1fr)}@media(max-width:650px){#arena-match-dialog .al-visit-wrap{grid-template-columns:1fr}#arena-match-dialog .al-leg-sidecards{grid-template-columns:repeat(2,minmax(0,1fr))}#arena-match-dialog .al-stat-card{padding:8px}#arena-match-dialog .al-stat-card dl{font-size:12px;gap:5px}}
 </style>
 </head>
 <body class="projector mode-competition">
@@ -1087,23 +1088,58 @@ function arenaCaptureVisits(eventId,infos){
  }
  if(changed&&!arenaLeagueTest)try{localStorage.setItem('dl-match-visits-v1:'+eventId,JSON.stringify(store));}catch{}
 }
-function arenaVisitHTML(eventId,g){
- const store=arenaVisitStore(eventId),rec=store[g.gameId]||store[g.id];
- const demo=arenaLeagueTest&&qs.get('leg-demo')==='1';
+function arenaAnalysisLegs(eventId,g){
+ const rec=arenaVisitStore(eventId)[g.gameId]||arenaVisitStore(eventId)[g.id];
+ const demo=arenaLeagueTest&&qs.get('leg-demo')==='1'&&g.done;
  const legs={...(rec?.legs||{})};
- if(demo){ // Isolierte Beispieldaten, niemals speichern oder in Highlights übernehmen.
-  const scores=[[100,60],[60,100],[140,45],[60,60],[81,100],[60,40]];
-  let rest=[501,501];const visits=[];for(const pair of scores){for(let i=0;i<2;i++){if(rest[0]===0||rest[1]===0)break;const score=pair[i];rest[i]-=score;visits.push({side:i+1,name:i?'Demo Gast':'Demo Heim',score,rest:rest[i],darts:3});}}
-  legs[1]={visits,winner:'Demo Heim',demo:true};
+ if(demo){
+  const winners=[...Array(Number(g.h)).fill(1),...Array(Number(g.v)).fill(2)];
+  const winning=[[100,60,140,60,81,60],[60,100,60,100,60,81,40],[60,60,100,60,60,60,61,40]];
+  const losing=[[60,100,45,60,100,45,40],[100,60,60,45,60,60,45],[45,60,100,60,45,60,60]];
+  winners.forEach((winner,i)=>{
+   const w=winning[i%3],l=losing[i%3],visits=[],rest=[501,501];
+   const starter=(g.anwurf==='gast'?2:1);const first=i%2?3-starter:starter;
+   for(let j=0;j<w.length;j++)for(const side of [first,3-first]){
+    if(rest[winner-1]===0)break;
+    const score=side===winner?w[j]:(l[j]??40);if(score==null)continue;
+    rest[side-1]-=score;visits.push({side,score,rest:rest[side-1],darts:3});
+   }
+   legs[i+1]={visits,winner:winner===1?'Demo Heim':'Demo Gast',winnerSide:winner,starterSide:first,demo:true,complete:true};
+  });
  }
  const count=g.done?Number(g.h)+Number(g.v):g.active?Number(g.active.spieler1Legs||0)+Number(g.active.spieler2Legs||0)+1:0;
  const nums=[...new Set([...Array.from({length:Math.min(50,Math.max(0,count||0))},(_,i)=>i+1),...Object.keys(legs).map(Number)])].sort((a,b)=>a-b);
- const fmt=x=>safe(x);
- const avg=(l,side)=>{const v=l.visits.filter(x=>x.side===side);if(!v.length||!l.demo||!v.every(x=>Number.isInteger(x.darts)&&x.darts>0))return '–';return (3*v.reduce((a,x)=>a+x.score,0)/v.reduce((a,x)=>a+x.darts,0)).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});};
- const playerName=(side,l)=>fmt(l.demo?(side===1?'Demo Heim':'Demo Gast'):(side===1?(g.home?.name||'Heim'):(g.away?.name||'Gast')));
- const visitsCount=arr=>arr.length?String(arr.length):'–';
- const visitPoints=arr=>arr.length?String(arr.reduce((n,x)=>n+(Number(x.score)||0),0)):'–';
- return '<h3>Matchanalyse · Legs und Aufnahmen</h3>'+(demo?'<p class="al-note" style="color:#f3c55c">DEMO: Leg 1 enthält ausschließlich fiktive Aufnahmen und Leg-AVG, keine echten Matchdaten.</p>':'<p class="al-note">Historische Aufnahmen sind in den vorliegenden Daten nicht enthalten. Live werden beobachtete Scoreänderungen angezeigt. Leg-AVG erst bei vollständigen Aufnahmen und bekannten Dartanzahlen.</p>')+(nums.length?nums.map(n=>{const l=legs[n]||{visits:[]};const v=l.visits||[];const sides=[1,2].map(i=>v.filter(x=>x.side===(l.demo?i:g.swap?3-i:i)));const rows=Array.from({length:Math.max(sides[0].length,sides[1].length)},(_,i)=>{const a=sides[0][i],b=sides[1][i];const cell=(x,k)=>x?fmt(x[k]):'–';return `<tr><td>${i+1}</td><td>${cell(a,'score')}</td><td>${cell(a,'rest')}</td><td>${cell(b,'score')}</td><td>${cell(b,'rest')}</td></tr>`;}).join('');const left=sides[0],right=sides[1];return `<details class="al-leg-detail" data-leg="${n}"><summary>Leg ${n}${l.winner?' · Sieger: '+fmt(l.winner):''}${l.demo?' · DEMO':''}</summary><div class="al-leg-summaryline"><div class="left">${playerName(1,l)} · Leg-AVG <b>${avg(l,1)}</b></div><div class="mid">${l.winner?'Sieger: '+fmt(l.winner):'Leg offen'}</div><div class="right">Leg-AVG <b>${avg(l,2)}</b> · ${playerName(2,l)}</div></div>${v.length?`<div class="al-visit-wrap"><div class="al-visit-table-wrap"><p class="al-visit-caption">Jede beobachtete Aufnahme mit Score und Rest.</p><div class="al-scroll"><table><thead><tr><th>#</th><th>${playerName(1,l)} Score</th><th>Rest</th><th>${playerName(2,l)} Score</th><th>Rest</th></tr></thead><tbody>${rows}</tbody></table></div></div><aside class="al-leg-sidecards"><section class="al-stat-card"><h4>${playerName(1,l)}</h4><div class="al-stat-team">Leg-Werte</div><dl><dt>Leg-AVG</dt><dd>${avg(l,1)}</dd><dt>Aufnahmen</dt><dd>${visitsCount(left)}</dd><dt>Punkte</dt><dd>${visitPoints(left)}</dd><dt>Letzter Rest</dt><dd>${left.length?fmt(left[left.length-1].rest):'–'}</dd></dl></section><section class="al-stat-card"><h4>${playerName(2,l)}</h4><div class="al-stat-team">Leg-Werte</div><dl><dt>Leg-AVG</dt><dd>${avg(l,2)}</dd><dt>Aufnahmen</dt><dd>${visitsCount(right)}</dd><dt>Punkte</dt><dd>${visitPoints(right)}</dd><dt>Letzter Rest</dt><dd>${right.length?fmt(right[right.length-1].rest):'–'}</dd></dl></section></aside></div>`:'<p class="al-note">Keine Aufnahmedaten vorhanden.</p>'}</details>`;}).join(''):'<p class="al-note">Noch keine Legs verfügbar.</p>');
+ return {demo,legs:nums.map(n=>({...legs[n],n,visits:legs[n]?.visits||[]}))};
+}
+function arenaLegSide(l,g,side){return l.visits.filter(x=>x.side===(l.demo?side:g.swap?3-side:side));}
+function arenaLegValues(l,g,side){
+ const v=arenaLegSide(l,g,side);const known=v.length>0&&(l.demo||l.complete===true)&&v.every(x=>Number.isInteger(x.darts)&&x.darts>=1&&x.darts<=3&&Number.isFinite(x.score));
+ const darts=known?v.reduce((a,x)=>a+x.darts,0):null;
+ const points=known?v.reduce((a,x)=>a+x.score,0):null;
+ const prefix=n=>{if(!known)return null;let d=0,p=0;for(const x of v){d+=x.darts;p+=x.score;if(d===n)return p;if(d>n)return null;}return null;};
+ return {v,darts,points,avg:darts?3*points/darts:null,p9:prefix(9),p12:prefix(12)};
+}
+function arenaNumber(x,dec=false){return x==null||!Number.isFinite(Number(x))?'–':Number(x).toLocaleString('de-DE',{minimumFractionDigits:dec?2:0,maximumFractionDigits:dec?2:0});}
+function arenaVisitHTML(eventId,g){
+ const a=arenaAnalysisLegs(eventId,g);const pname=(i,l)=>safe(l.demo?(i===1?'Demo Heim':'Demo Gast'):(i===1?g.home?.name||'Heim':g.away?.name||'Gast'));
+ return '<h3>Matchanalyse · Legs und Aufnahmen</h3>'+(a.demo?'<p class="al-note" style="color:#f3c55c">DEMO: Sämtliche Aufnahmen und Wurfstatistiken sind fiktiv.</p>':'<p class="al-note">Nur beobachtete Scoreänderungen. Vollständige Leg-Werte erst bei lückenlosen Daten und bekannten Dartanzahlen.</p>')+(a.legs.length?a.legs.map(l=>{
+ const h=arenaLegValues(l,g,1),v=arenaLegValues(l,g,2);const cell=(x,k)=>x?safe(x[k]):'–';
+ const rows=Array.from({length:Math.max(h.v.length,v.v.length)},(_,i)=>`<tr><td>${cell(h.v[i],'score')}</td><td>${cell(h.v[i],'rest')}</td><td>${i+1}</td><td>${cell(v.v[i],'rest')}</td><td>${cell(v.v[i],'score')}</td></tr>`).join('');
+ const card=(p,i)=>`<section class="al-stat-card"><h4>${pname(i,l)}</h4><dl><dt>AVG</dt><dd>${arenaNumber(p.avg,true)}</dd><dt>First 9 AVG</dt><dd>${arenaNumber(p.p9==null?null:p.p9/3,true)}</dd><dt>Geworfene Darts</dt><dd>${arenaNumber(p.darts)}</dd></dl></section>`;
+ return `<details class="al-leg-detail" data-leg="${l.n}"><summary>Leg ${l.n}${l.winner?' · Sieger: '+safe(l.winner):''}${l.demo?' · DEMO':''}</summary><div class="al-visit-wrap"><div class="al-visit-table-wrap">${rows?`<div class="al-scroll"><table><thead><tr><th colspan="2">${pname(1,l)}</th><th></th><th colspan="2">${pname(2,l)}</th></tr><tr><th>Score</th><th>Rest</th><th>Aufnahme</th><th>Rest</th><th>Score</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p class="al-note">Keine Aufnahmedaten vorhanden.</p>'}</div><aside class="al-leg-sidecards">${card(h,1)}${card(v,2)}</aside></div></details>`;
+ }).join(''):'<p class="al-note">Noch keine Legs verfügbar.</p>');
+}
+function arenaDemoMatchValues(a,g,side){
+ const legs=a.legs.map(l=>({l,...arenaLegValues(l,g,side)}));const darts=legs.reduce((n,x)=>n+x.darts,0),points=legs.reduce((n,x)=>n+x.points,0);const visits=legs.flatMap(x=>x.v);const won=legs.filter(x=>x.l.winnerSide===side);const avgPrefix=k=>{const arr=legs.filter(x=>x['p'+k]!=null);return arr.length?3*arr.reduce((n,x)=>n+x['p'+k],0)/(arr.length*k):null;};
+ return [darts?3*points/darts:null,avgPrefix(9),avgPrefix(12),darts,null,null,visits.filter(x=>x.score>=100&&x.score<140).length,visits.filter(x=>x.score>=140&&x.score<180).length,visits.filter(x=>x.score===180).length,won.length?Math.max(...won.map(x=>x.v.at(-1).score)):null,won.length?Math.min(...won.map(x=>x.darts)):null,won.length?Math.max(...won.map(x=>x.darts)):null,won.filter(x=>x.l.starterSide===side).length,won.filter(x=>x.l.starterSide!==side).length];
+}
+function arenaAvgChart(a,g){
+ const series=[1,2].map(i=>a.legs.map(l=>arenaLegValues(l,g,i).avg));const all=series.flat().filter(x=>x!=null);if(!all.length)return '<h3>Average-Verlauf</h3><p class="al-note">Noch keine vollständigen Leg-Averages verfügbar.</p>';
+ const W=700,H=190,left=48,right=24,top=16,bottom=36,max=Math.max(100,Math.ceil(Math.max(...all)/25)*25),X=i=>left+(W-left-right)*(a.legs.length===1?.5:i/(a.legs.length-1)),Y=v=>top+(H-top-bottom)*(1-v/max);
+ let svg='';for(let i=0;i<=4;i++){const v=max*i/4;svg+=`<line x1="${left}" x2="${W-right}" y1="${Y(v)}" y2="${Y(v)}" stroke="#344156"/><text x="${left-8}" y="${Y(v)+4}" text-anchor="end" fill="#aebace" font-size="11">${Math.round(v)}</text>`;}
+ a.legs.forEach((l,i)=>svg+=`<text x="${X(i)}" y="${H-10}" text-anchor="middle" fill="#aebace" font-size="11">Leg ${l.n}</text>`);
+ series.forEach((arr,k)=>{const c=k?'#d8e3f5':'#f3c55c';arr.forEach((v,i)=>{if(v==null)return;if(i&&arr[i-1]!=null)svg+=`<line x1="${X(i-1)}" y1="${Y(arr[i-1])}" x2="${X(i)}" y2="${Y(v)}" stroke="${c}" stroke-width="2.5"/>`;svg+=`<circle cx="${X(i)}" cy="${Y(v)}" r="4" fill="${c}"><title>${arenaNumber(v,true)}</title></circle>`;});});
+ return `<h3>Average-Verlauf${a.demo?' · DEMO':''}</h3><div class="al-chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Average pro Leg">${svg}</svg><p class="al-note"><span style="color:#f3c55c">● ${safe(a.demo?'Demo Heim':g.home?.name||'Heim')}</span> &nbsp; <span style="color:#d8e3f5">● ${safe(a.demo?'Demo Gast':g.away?.name||'Gast')}</span></p></div>`;
 }
 
 function arenaCaptureMatchHighlights(eventId,infos){
@@ -1188,7 +1224,7 @@ function arenaLeagueUI(){
    const highlights=arenaGameHighlights(e.id,g,rows,games);
    const status=g.done?'Beendet':g.active?'Live':'Offen';
    const score=g.done?val(g.h)+' : '+val(g.v):g.active?val(g.active[g.swap?'spieler2Legs':'spieler1Legs'])+' : '+val(g.active[g.swap?'spieler1Legs':'spieler2Legs']):'– : –';
-   return `<div class="al-game al-click-game" role="button" tabindex="0" data-match-id="${safe(g.id)}" aria-label="Matchstatistik Spiel ${val(g.counter)}"><small>Spiel ${val(g.counter)} · ${status}${g.active&&!g.done?' · '+safe(g.active.boardName||''):''}${highlights.length?' <span class="al-trophy" aria-label="Highlight">🏆</span>':''} <span class="al-match-link">Statistik ›</span></small><div><span>${name(g.home)}</span><strong>${score}</strong><span>${name(g.away)}</span></div>${highlights.length?'<aside class="al-match-highlight">'+highlights.map(x=>'<span>'+safe(x)+'</span>').join('')+'</aside>':''}</div>`;
+   return `<div class="al-game al-click-game" role="button" tabindex="0" data-match-id="${safe(g.id)}" aria-label="Matchstatistik Spiel ${val(g.counter)}"><small>Spiel ${val(g.counter)} · ${status}${g.active&&!g.done?' · '+safe(g.active.boardName||''):''}${highlights.length?(highlights.some(x=>!x.endsWith(' *'))?' <span class="al-trophy" aria-label="Bestätigtes Highlight">🏆</span>':' <span class="al-trophy" aria-label="Mögliche Highlight-Partie">🏆?</span>'):''} <span class="al-match-link">Statistik ›</span></small><div><span>${name(g.home)}</span><strong>${score}</strong><span>${name(g.away)}</span></div>${highlights.length?'<aside class="al-match-highlight">'+highlights.map(x=>'<span>'+safe(x)+'</span>').join('')+'</aside>':''}</div>`;
   }).join('')}</section>`;
  }
  if(!games.length)html+='<p class="al-note">Noch keine Spielpaarungen verfügbar.</p>';
@@ -1218,17 +1254,16 @@ function arenaDrawMatch(){
   const r=p&&g.done&&played.length===1?model.rows.find(z=>z.p.id===p.id):null;
   let ix=n; if(snap&&p){const name=String(p.name||'').trim().toLowerCase();const hits=[1,2].filter(i=>snap['spieler'+i+'Id']===p.id||String(snap['spieler'+i+'Name']||'').trim().toLowerCase()===name);ix=hits.length===1?hits[0]:0;}
   const read=k=>ix?snap?.['spieler'+ix+k]:null;
-  return [read('Average')??r?.average,r?.first9Average,r?._100Plus,r?._140Plus,read('Count180er')??r?._180er,read('HighOut')??(r?.highfinishes?.length?Math.max(...r.highfinishes):null),read('Best')??r?.bestLeg];
+  return [read('Average')??r?.average,r?.first9Average,r?.first12Average,r?.anzahlWuerfeGesamt,null,null,Array.isArray(r?.highscores)?r.highscores.filter(x=>x>=100&&x<140).length:null,Array.isArray(r?.highscores)?r.highscores.filter(x=>x>=140&&x<180).length:null,read('Count180er')??r?._180er,read('HighOut')??null,read('Best')??r?.bestLeg,r?.worstLeg,null,null];
  }
- const h=side(g.home,g.swap?2:1),v=side(g.away,g.swap?1:2);
+ const analysis=arenaAnalysisLegs(e.id,g);const h=analysis.demo?arenaDemoMatchValues(analysis,g,1):side(g.home,g.swap?2:1),v=analysis.demo?arenaDemoMatchValues(analysis,g,2):side(g.away,g.swap?1:2);
  const score=g.done?fmt(g.h)+' : '+fmt(g.v):g.active?fmt(g.active[g.swap?'spieler2Legs':'spieler1Legs'])+' : '+fmt(g.active[g.swap?'spieler1Legs':'spieler2Legs']):'– : –';
- const labels=['Average','First 9 AVG','100+','140+','180er','Highfinish','Bestes Leg'];
  const hi=arenaGameHighlights(e.id,g,model.rows,model.games);
  const note=g.done&&snap&&!snap.abgeschlossen?'Letzter gespeicherter Live-Stand; Wurfstatistik möglicherweise unvollständig.': 'Nicht verfügbare Matchwerte werden als – angezeigt. Keine Spieltagswerte aus mehreren Partien.';
  const body=arenaMatchDialog.querySelector('.al-dialog-content');const opened=[...body.querySelectorAll('details[open]')].map(x=>x.dataset.leg);
- const statLabels=['Average','First 9 AVG','100+','140+','180er','Highfinish','Bestes Leg'];
- const card=(player,team,vals)=>`<section class="al-stat-card"><h4>${safe(player||'Noch offen')}</h4><div class="al-stat-team">${safe(team||'')}</div><dl>${statLabels.map((label,i)=>`<dt>${label}</dt><dd>${fmt(vals[i])}</dd>`).join('')}</dl></section>`;
- const markup=`<p class="al-note">Block ${safe(g.bereich)} · Spiel ${safe(g.counter)} · ${g.type==='DP'?'Doppel':'Einzel'} · ${g.done?'Beendet':g.active?'Live':'Offen'}</p><div class="al-score"><div>${safe(g.home?.name||'Noch offen')}</div><strong>${score}</strong><div>${safe(g.away?.name||'Noch offen')}</div></div><div class="al-match-stat-grid">${card(g.home?.name,model.m.mannschaftHeim,h)}${card(g.away?.name,model.m.mannschaftGast,v)}</div>${hi.length?'<h3>🏆 Highlights</h3>'+hi.map(x=>'<p>'+safe(x)+'</p>').join('')+'<p class="al-match-highlight-note"><b>*</b> bedeutet: aus der historischen Spieltagsstatistik erkannt, ohne exakte Matchzuordnung.</p>':''}<p class="al-note">${note}</p>${arenaVisitHTML(e.id,g)}`;
+ const statLabels=['AVG','First 9 AVG','First 12 AVG','Geworfene Darts','Doppelquote','Doppelversuche','100–139 Punkte','140–179 Punkte','180er','Höchstes Finish','Kürzestes Leg','Längstes Leg','Legs mit Anwurf','Breaks'];
+ const metrics=statLabels.map((label,i)=>((i===4||i===5||i>=12)&&h[i]==null&&v[i]==null)?'':`<tr><td>${arenaNumber(h[i],i<3||i===4)}${i===4&&h[i]!=null?' %':''}</td><th scope="row">${label}</th><td>${arenaNumber(v[i],i<3||i===4)}${i===4&&v[i]!=null?' %':''}</td></tr>`).join('');
+ const markup=`<p class="al-note">Block ${safe(g.bereich)} · Spiel ${safe(g.counter)} · ${g.type==='DP'?'Doppel':'Einzel'} · ${g.done?'Beendet':g.active?'Live':'Offen'}</p><div class="al-score"><div>${safe(g.home?.name||'Noch offen')}</div><strong>${score}</strong><div>${safe(g.away?.name||'Noch offen')}</div></div><h3>Matchstatistik${analysis.demo?' · DEMO':''}</h3>${analysis.demo?'<p class="al-note" style="color:#f3c55c">Fiktive Wurfstatistik zum Testen, reales Matchergebnis.</p>':''}<table class="al-match-metrics"><thead><tr><th>${safe(analysis.demo?'Demo Heim':g.home?.name||'Heim')}</th><th></th><th>${safe(analysis.demo?'Demo Gast':g.away?.name||'Gast')}</th></tr></thead><tbody>${metrics}</tbody></table>${hi.length?'<h3>🏆 Highlights</h3>'+hi.map(x=>'<p>'+safe(x)+'</p>').join('')+'<p class="al-match-highlight-note"><b>*</b> bedeutet: aus der historischen Spieltagsstatistik erkannt, ohne exakte Matchzuordnung.</p>':''}<p class="al-note">${note}</p>${arenaAvgChart(analysis,g)}${arenaVisitHTML(e.id,g)}`;
  if(body.dataset.last!==markup){body.innerHTML=markup;body.dataset.last=markup;for(const el of body.querySelectorAll('details'))el.open=opened.includes(el.dataset.leg)||(!body.dataset.legInitialized&&el.dataset.leg==='1');body.dataset.legInitialized='1';}
 }
 function arenaShowMatch(ev){const el=ev.target.closest('[data-match-id]');if(!el)return;arenaOpenMatch={eventId:arenaLeagueId,id:el.dataset.matchId};const body=arenaMatchDialog.querySelector('.al-dialog-content');body.innerHTML='';delete body.dataset.last;delete body.dataset.legInitialized;arenaDrawMatch();if(!arenaMatchDialog.open)arenaMatchDialog.showModal();}

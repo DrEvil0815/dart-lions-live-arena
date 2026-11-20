@@ -627,22 +627,48 @@ function visibleGames(e,max){
  gs.sort((a,b)=>String(a.boardName||'').localeCompare(String(b.boardName||''),'de',{numeric:true}));
  return gs.slice(0,max);
 }
-// Feste physische Boards bei einem Doppelheimspieltag:
-// Begegnung 1 = Board 1 und 3, Begegnung 2 = Board 4 und 6.
-// Kein automatisches Verschieben eines Spiels auf einen anderen Boardplatz.
+// Physische Boards aus Darthelfer, nicht aus der Mannschaftsreihenfolge.
 const LIGA_BOARD_ZUORDNUNG=[[1,3],[4,6]];
 function boardNum(name){
  const text=String(name||'').trim();
  const match=text.match(/(?:board|dartboard|scheibe|autodarts|ad|\b)b?\s*[-#:]?\s*(\d+)\s*$/i)||text.match(/(?:^|\D)(\d+)\s*$/);
  return match?Number(match[1]):null;
 }
-function leagueBoardSlots(e,index){
- const numbers=LIGA_BOARD_ZUORDNUNG[index]||LIGA_BOARD_ZUORDNUNG[0];
- const active=visibleGames(e,99);
- return numbers.map(number=>{
-  const match=active.find(g=>boardNum(g.boardName)===number);
-  return match||placeholder('BOARD '+number);
+function leagueBoardPlan(selected){
+ const entries=selected.map(e=>{
+  const active=visibleGames(e,99);
+  const numbers=[...new Set(active.map(g=>boardNum(g.boardName)).filter(n=>n!==null))];
+  const pair=numbers.length?LIGA_BOARD_ZUORDNUNG.find(p=>numbers.every(n=>p.includes(n))):null;
+  return {e,active,numbers,pair};
  });
+ const used=new Set(entries.filter(x=>x.pair).flatMap(x=>x.pair));
+ for(const x of entries){
+  if(x.pair){x.slots=x.pair.slice();}
+  else if(x.active.length){x.slots=x.numbers.slice();}
+  else{
+   const cached=x.e?._boardSlots||[];
+   const candidates=[cached,...LIGA_BOARD_ZUORDNUNG].filter(p=>p.length&&p.every(n=>!used.has(n)));
+   x.slots=candidates[0]?.slice()||[];
+   x.slots.forEach(n=>used.add(n));
+  }
+  if(x.e&&x.slots.length)x.e._boardSlots=x.slots.slice();
+ }
+ return entries;
+}
+function leagueBoardSlots(e,index){
+ const entry=leagueBoardPlan(chosenEvents())[index];
+ if(!entry)return [placeholder('BOARD FREI'),placeholder('BOARD FREI')];
+ const active=entry.active;
+ const seen=new Set();
+ const cards=entry.slots.map(number=>{
+  const game=active.find(g=>boardNum(g.boardName)===number);
+  if(game)seen.add(game);
+  return game||placeholder('BOARD '+number);
+ });
+ // Auch unerwartete oder nicht nummerierte Boardnamen niemals ausblenden.
+ for(const game of active)if(!seen.has(game))cards.push(game);
+ while(cards.length<2)cards.push(placeholder('BOARD FREI'));
+ return cards;
 }
 function placeholder(name){return {placeholder:true,boardName:name};}
 // Gegnerlogos als Originaldateien im GitHub-Ordner "logos/gegner/" hinterlegen.

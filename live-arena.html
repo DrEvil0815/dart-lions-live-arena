@@ -295,6 +295,7 @@ border-radius:12px!important;z-index:10!important;
 #arena-match-dialog .al-match-portraits .portrait:only-child{max-width:90%!important}
 @media(max-width:480px){#arena-match-dialog .al-match-score-photos{gap:5px}#arena-match-dialog .al-match-person{font-size:13px}#arena-match-dialog .al-match-portraits .portrait{border-radius:6px}}
 </style>
+<style>.game.arena-winner-card{position:relative;min-height:0;overflow:hidden;background:linear-gradient(115deg,#541b25,#101b2c 55%,#49301b);border:2px solid #f3c55c}.arena-winner-body{display:flex;align-items:center;justify-content:center;gap:clamp(6px,1vw,18px);flex:1;min-height:0;padding:8px;overflow:hidden}.arena-winner-body img.portrait{width:30%!important;height:90%!important;max-height:100%!important;min-height:0!important;object-fit:contain!important;flex:0 0 30%}.arena-winner-info{flex:1;min-width:0;color:#fff;display:flex;flex-direction:column;gap:4px;overflow-wrap:anywhere}.arena-winner-info strong{color:#f3c55c;font-size:clamp(13px,1.6vw,25px)}.arena-winner-info b{font-size:clamp(14px,2vw,30px)}.arena-winner-result{font-size:clamp(20px,3vw,46px);font-weight:900;color:#f3c55c}.arena-winner-info small{font-size:clamp(10px,1vw,16px);line-height:1.2}</style>
 </head>
 <body class="projector mode-competition">
 <div class="shell">
@@ -576,7 +577,15 @@ function player(g,n){
  const last=g[`spieler${n}LastThrow`],best=g[`spieler${n}Best`],finish=g[`spieler${n}HighOut`],d180=g[`spieler${n}Count180er`];
  return `<div class="player${active?' active':''}">${photo(name)}<div class="pinfo"><div class="pname">${active?'➤ ':''}${safe(name)}</div><div class="psub">Ø ${safe(avg??'–')} · Letzte Aufnahme ${safe(last??'–')}</div><div class="stats"><span class="stat">Kürzestes Leg <b>${safe(best??'–')}${best!=null?' Darts':''}</b></span><span class="stat">Highfinish <b>${safe(finish??'–')}</b></span><span class="stat">180er <b>${safe(d180??0)}</b></span></div></div><div class="scores"><div class="legs"><div class="tiny">LEGS</div><div class="legval">${safe(legs??0)}</div></div><div class="restbox"><div class="rest">${safe(value??'–')}</div><div class="tiny">REST</div></div></div></div>`;
 }
-function card(g){
+const arenaBoardWinners=new Map();
+function arenaWinnerKey(eventId,board){return String(eventId||'')+'|'+(boardNum(board)??String(board||'').trim().toLowerCase());}
+function arenaWinnerCard(g,eventId){
+ const w=arenaBoardWinners.get(arenaWinnerKey(eventId,g?.boardName));
+ if(!w||w.until<=Date.now()||!g.placeholder)return '';
+ return `<article class="game arena-winner-card"><div class="board-top"><span class="board-title">${safe(g.boardName)}</span><span class="board-live">BEENDET</span></div><div class="arena-winner-body">${photo(w.player)}<div class="arena-winner-info"><strong>🏆 MATCHSIEGER</strong><b>${safe(w.player)}</b><div class="arena-winner-result">${safe(w.result)}</div><small>${safe(w.stats)}</small></div></div></article>`;
+}
+function card(g,eventId){
+ const winner=arenaWinnerCard(g,eventId);if(winner)return winner;
  const valid=g&&!g.placeholder;
  const title=valid?(g.boardName||'BOARD'):(g?.boardName||'BOARD FREI');
  if(!valid)return `<article class="game placeholder"><div class="board-top"><span class="board-title">${safe(title)}</span><span class="board-live">BEREIT</span></div><div class="players">Aktuell keine Begegnung auf diesem Board</div></article>`;
@@ -627,48 +636,22 @@ function visibleGames(e,max){
  gs.sort((a,b)=>String(a.boardName||'').localeCompare(String(b.boardName||''),'de',{numeric:true}));
  return gs.slice(0,max);
 }
-// Physische Boards aus Darthelfer, nicht aus der Mannschaftsreihenfolge.
+// Feste physische Boards bei einem Doppelheimspieltag:
+// Begegnung 1 = Board 1 und 3, Begegnung 2 = Board 4 und 6.
+// Kein automatisches Verschieben eines Spiels auf einen anderen Boardplatz.
 const LIGA_BOARD_ZUORDNUNG=[[1,3],[4,6]];
 function boardNum(name){
  const text=String(name||'').trim();
  const match=text.match(/(?:board|dartboard|scheibe|autodarts|ad|\b)b?\s*[-#:]?\s*(\d+)\s*$/i)||text.match(/(?:^|\D)(\d+)\s*$/);
  return match?Number(match[1]):null;
 }
-function leagueBoardPlan(selected){
- const entries=selected.map(e=>{
-  const active=visibleGames(e,99);
-  const numbers=[...new Set(active.map(g=>boardNum(g.boardName)).filter(n=>n!==null))];
-  const pair=numbers.length?LIGA_BOARD_ZUORDNUNG.find(p=>numbers.every(n=>p.includes(n))):null;
-  return {e,active,numbers,pair};
- });
- const used=new Set(entries.filter(x=>x.pair).flatMap(x=>x.pair));
- for(const x of entries){
-  if(x.pair){x.slots=x.pair.slice();}
-  else if(x.active.length){x.slots=x.numbers.slice();}
-  else{
-   const cached=x.e?._boardSlots||[];
-   const candidates=[cached,...LIGA_BOARD_ZUORDNUNG].filter(p=>p.length&&p.every(n=>!used.has(n)));
-   x.slots=candidates[0]?.slice()||[];
-   x.slots.forEach(n=>used.add(n));
-  }
-  if(x.e&&x.slots.length)x.e._boardSlots=x.slots.slice();
- }
- return entries;
-}
 function leagueBoardSlots(e,index){
- const entry=leagueBoardPlan(chosenEvents())[index];
- if(!entry)return [placeholder('BOARD FREI'),placeholder('BOARD FREI')];
- const active=entry.active;
- const seen=new Set();
- const cards=entry.slots.map(number=>{
-  const game=active.find(g=>boardNum(g.boardName)===number);
-  if(game)seen.add(game);
-  return game||placeholder('BOARD '+number);
+ const numbers=LIGA_BOARD_ZUORDNUNG[index]||LIGA_BOARD_ZUORDNUNG[0];
+ const active=visibleGames(e,99);
+ return numbers.map(number=>{
+  const match=active.find(g=>boardNum(g.boardName)===number);
+  return match||placeholder('BOARD '+number);
  });
- // Auch unerwartete oder nicht nummerierte Boardnamen niemals ausblenden.
- for(const game of active)if(!seen.has(game))cards.push(game);
- while(cards.length<2)cards.push(placeholder('BOARD FREI'));
- return cards;
 }
 function placeholder(name){return {placeholder:true,boardName:name};}
 // Gegnerlogos als Originaldateien im GitHub-Ordner "logos/gegner/" hinterlegen.
@@ -840,10 +823,11 @@ function eventSection(e,m,i,allowExpand){
  // Nur die Competition darf Karten ohne laufendes Spiel ausblenden.
  // Ligaspiele zeigen immer ihre beiden festen Boardplätze.
  if(!games.length){games=Array.from({length:max},(_,j)=>placeholder('BOARD '+(m==='competition'?j+1:(LIGA_BOARD_ZUORDNUNG[i]||LIGA_BOARD_ZUORDNUNG[0])[j])));}
+ if(m==='competition'&&e){for(const w of arenaBoardWinners.values()){if(w.eventId===e.id&&w.until>Date.now()&&!games.some(g=>arenaWinnerKey(e.id,g.boardName)===arenaWinnerKey(e.id,w.board)))games.push(placeholder(w.board));}games.sort((a,b)=>String(a.boardName||'').localeCompare(String(b.boardName||''),'de',{numeric:true}));}
  const count=games.length;
  const one=allowExpand&&m==='competition'&&count===1&&!!e;
  const rowCount=Math.max(1,Math.ceil(count/2));
- return `<section class="event-section${one?' has-one':''}">${sectionHeader(e,m,i)}<div class="board-grid" style="--rows:${rowCount}">${games.map(card).join('')}</div></section>`;
+ return `<section class="event-section${one?' has-one':''}">${sectionHeader(e,m,i)}<div class="board-grid" style="--rows:${rowCount}">${games.map(g=>card(g,e?.id)).join('')}</div></section>`;
 }
 function render(){
  classNames();const m=effectiveMode(),selected=chosenEvents(),stage=byId('stage');
@@ -930,7 +914,7 @@ function observeHighlights(eventId,games){
      if(count!=null&&count!=='')parts.push('180er: '+count);
      if(high!=null&&Number(high)>0)parts.push('Highfinish: '+high);
      if(best!=null&&Number(best)>0)parts.push('Kürzestes Leg: '+best);
-     window.DartLionsHighlight.emit({kind:'winner',player:String(g['spieler'+n+'Name']||'Sieger'),board:String(g.boardName||'Board'),stats:parts.join('  ·  ')});
+     if(g.boardName){const k=arenaWinnerKey(eventId,g.boardName);const w={eventId,board:g.boardName,gameId:id,player:String(g['spieler'+n+'Name']||'Sieger'),result:a+' : '+b,stats:parts.slice(1).join('  ·  '),until:Date.now()+120000};arenaBoardWinners.set(k,w);setTimeout(()=>{if(arenaBoardWinners.get(k)===w){arenaBoardWinners.delete(k);render();}},120050);}
     }
    }
    highlightSnapshots.set(id,{finished:true});
@@ -946,6 +930,8 @@ function observeHighlights(eventId,games){
   }
   highlightSnapshots.set(id,Object.assign(now,{finished:false}));
  }
+ // Ein neues angesetztes oder laufendes Match hat immer Vorrang.
+ for(const g of games){if(g&&!g.placeholder&&!g.abgeschlossen&&g.boardName){const k=arenaWinnerKey(eventId,g.boardName),w=arenaBoardWinners.get(k);const id=String(eventId)+'|'+String(g.gameId||g.id||[g.boardName,g.spieler1Id||g.spieler1Name,g.spieler2Id||g.spieler2Name].join('|'));if(w&&w.gameId!==id)arenaBoardWinners.delete(k);}}
  // Entfernte Spiele vergessen, damit sie bei der nächsten Begegnung neu initialisieren.
  for(const key of highlightSnapshots.keys())if(key.startsWith(String(eventId)+'|')&&!visible.has(key))highlightSnapshots.delete(key);
 }

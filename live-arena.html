@@ -552,7 +552,7 @@ function effectiveMode(){if(DEMO)return effectiveDemoMode();if(chosen!=='auto')r
 function teamRank(e){
  const n=teamNames(e)[0]||eventName(e);
  const r=n.match(/(?:dart\s*lions(?:\s+gr[aä]fenberg)?)\s+(III|II|I|3|2|1)\b/i);
- if(!r)return 99;
+ if(!r)return /^dart\s*lions\s+gr[aä]fenberg\s*$/i.test(n.trim())?1:99;
  return ({I:1,II:2,III:3,'1':1,'2':2,'3':3})[r[1].toUpperCase()]||99;
 }
 function chosenEvents(){
@@ -589,7 +589,7 @@ function card(g,eventId){
  const valid=g&&!g.placeholder;
  const title=valid?(g.boardName||'BOARD'):(g?.boardName||'BOARD FREI');
  if(!valid)return `<article class="game placeholder"><div class="board-top"><span class="board-title">${safe(title)}</span><span class="board-live">BEREIT</span></div><div class="players">Aktuell keine Begegnung auf diesem Board</div></article>`;
- return `<article class="game"><div class="board-top"><span class="board-title">${safe(title)}</span><span class="board-live">● ${g.inGame?'IM SPIEL':'LIVE-DATEN'}</span></div><div class="players">${player(g,1)}${player(g,2)}</div><div class="board-bottom"><span>${safe(g.bestOfLegs?'BEST OF '+g.bestOfLegs:'LIVE')}</span></div></article>`;
+ return `<article class="game"><div class="board-top"><span class="board-title">${safe(title)}</span><span class="board-live">● ${g.startssoon?'STARTET GLEICH':(g.inGame||g.spielerIdActive||g.spielerIdAktiv)?'IM SPIEL':'LIVE-DATEN'}</span></div><div class="players">${player(g,1)}${player(g,2)}</div><div class="board-bottom"><span>${safe(g.bestOfLegs?'BEST OF '+g.bestOfLegs:'LIVE')}</span></div></article>`;
 }
 function eventName(e){return e?.data?.turnierMain?.bezeichnung||e?.bezeichnung||e?.data?.turnierGruppe?.bezeichnung||'Ligaspiel';}
 function teamNames(e){
@@ -632,7 +632,7 @@ function leagueScore(e){
  return {home,away,played:home+away,ambiguous};
 }
 function visibleGames(e,max){
- const gs=(e?.games||[]).filter(g=>g&&!g.abgeschlossen&&!g.startssoon);
+ const gs=(e?.games||[]).filter(g=>g&&!g.abgeschlossen&&!g.placeholder&&(!g._arenaSeenAt||Date.now()-g._arenaSeenAt<300000));
  gs.sort((a,b)=>String(a.boardName||'').localeCompare(String(b.boardName||''),'de',{numeric:true}));
  return gs.slice(0,max);
 }
@@ -646,12 +646,19 @@ function boardNum(name){
  return match?Number(match[1]):null;
 }
 function leagueBoardSlots(e,index){
- const numbers=LIGA_BOARD_ZUORDNUNG[index]||LIGA_BOARD_ZUORDNUNG[0];
  const active=visibleGames(e,99);
- return numbers.map(number=>{
-  const match=active.find(g=>boardNum(g.boardName)===number);
-  return match||placeholder('BOARD '+number);
- });
+ const rank=e?teamRank(e):99;
+ const defaults=LIGA_BOARD_ZUORDNUNG[rank===1?0:rank===2?1:index]||LIGA_BOARD_ZUORDNUNG[0];
+ const numbers=[...new Set(active.map(g=>boardNum(g.boardName)).filter(n=>n!==null))];
+ const pair=numbers.length?LIGA_BOARD_ZUORDNUNG.find(p=>numbers.every(n=>p.includes(n))):null;
+ const slots=pair|| (numbers.length?numbers: (e?._boardSlots?.length?e._boardSlots:defaults));
+ if(e&&numbers.length)e._boardSlots=slots.slice();
+ const seen=new Set();
+ const cards=slots.map(n=>{const g=active.find(x=>boardNum(x.boardName)===n);if(g)seen.add(g);return g||placeholder('BOARD '+n);});
+ // Never suppress a received match because its board name is unexpected.
+ for(const g of active)if(!seen.has(g))cards.push(g);
+ while(cards.length<2)cards.push(placeholder('BOARD FREI'));
+ return cards;
 }
 function placeholder(name){return {placeholder:true,boardName:name};}
 // Gegnerlogos als Originaldateien im GitHub-Ordner "logos/gegner/" hinterlegen.
@@ -935,8 +942,34 @@ function observeHighlights(eventId,games){
  // Entfernte Spiele vergessen, damit sie bei der nächsten Begegnung neu initialisieren.
  for(const key of highlightSnapshots.keys())if(key.startsWith(String(eventId)+'|')&&!visible.has(key))highlightSnapshots.delete(key);
 }
+// Veranstalter-Feed liefert ebenfalls laufende Spiele (auch inGame:false).
+function arenaApplyLiveGames(e,items,source){
+ if(!e||!Array.isArray(items))return false;
+ const now=Date.now();
+ const list=items.filter(g=>g&&(!g.tournamentId||String(g.tournamentId)===String(e.id)));
+ // Veranstalterdaten sind die primäre Board-Quelle. Turniermeldungen dürfen sie nicht überschreiben.
+ if(source==='tournament'&&now-(e._organizerLiveAt||0)<45000)return false;
+ if(source==='organizer')e._organizerLiveAt=now;
+ const key=g=>String(boardNum(g.boardName)??g.boardId??g.gameId??g.id);
+ const stamp=g=>String(g.changeTimestamp||'');
+ const byBoard=new Map();
+ for(const g of e.games||[]){if(now-(g._arenaSeenAt||0)<300000)byBoard.set(key(g),g);}
+ for(const g of list){const k=key(g),old=byBoard.get(k);if(!old||!stamp(old)||!stamp(g)||stamp(g)>=stamp(old))byBoard.set(k,{...g,_arenaSeenAt:now});}
+ e.games=[...byBoard.values()];
+ try{arenaCaptureMatchHighlights(e.id,e.games);}catch(err){console.warn('Matchstatistik',err);}
+ try{observeHighlights(e.id,e.games);}catch(err){console.warn('Highlights',err);}
+ return true;
+}
+function arenaApplyOrganizerGames(items){
+ if(!Array.isArray(items))return false;
+ const groups=new Map();
+ for(const g of items){if(!g?.tournamentId)continue;const id=String(g.tournamentId);if(!groups.has(id))groups.set(id,[]);groups.get(id).push(g);}
+ let changed=false;
+ for(const e of events){const list=groups.get(String(e.id));if(list)changed=arenaApplyLiveGames(e,list,'organizer')||changed;}
+ return changed;
+}
 function rejoin(){const token=++cycle;clearTimeout(timer);if(client){try{client.disconnect(()=>{});}catch{}}if(sock){try{sock.close();}catch{}}subscriptions.clear();connected=false;client=null;sock=null;const ids=events.map(x=>x.id);if(!ids.length){render();status('Keine Veranstaltung live');return;}if(typeof SockJS==='undefined'||typeof Stomp==='undefined'){status('Live-Bibliothek nicht geladen',false,true);render();return;}
-try{sock=new SockJS(BASE+'/api/websocket');client=Stomp.over(sock);client.debug=()=>{};client.heartbeat.outgoing=0;client.heartbeat.incoming=0;client.connect({},()=>{if(token!==cycle)return;connected=true;status('Live verbunden',true);for(const e of events){const id=e.id;const s1=client.subscribe('/topic/public/tournament/game/infos/'+id,msg=>{if(token!==cycle)return;try{const d=JSON.parse(msg.body);if(Array.isArray(d.gameShortInfos)){arenaCaptureMatchHighlights(id,d.gameShortInfos);observeHighlights(id,d.gameShortInfos);e.games=d.gameShortInfos;lastMessage=Date.now();render();status('Live-Daten empfangen',true);}}catch(err){console.warn('Game-Daten',err)}});const s2=client.subscribe('/topic/public/tournament/publicview/'+id,msg=>{if(token!==cycle)return;try{const d=JSON.parse(msg.body);e.data=d;archiveAdd(d);lastMessage=Date.now();render();}catch(err){console.warn('Turnier-Daten',err)}});subscriptions.set(id,[s1,s2]);}render();},()=>{if(token!==cycle)return;connected=false;status('Verbindung unterbrochen',false,true);timer=setTimeout(rejoin,8000);});const original=sock.onclose;sock.onclose=ev=>{if(typeof original==='function')original(ev);if(token===cycle){connected=false;status('Verbindung unterbrochen',false,true);clearTimeout(timer);timer=setTimeout(rejoin,8000);}};}catch(err){status('Verbindung fehlgeschlagen',false,true);timer=setTimeout(rejoin,8000);}}
+try{sock=new SockJS(BASE+'/api/websocket');client=Stomp.over(sock);client.debug=()=>{};client.heartbeat.outgoing=0;client.heartbeat.incoming=0;client.connect({},()=>{if(token!==cycle)return;connected=true;status('Live verbunden',true);const orgSub=client.subscribe('/topic/public/eventoperator/game/infos/'+ORGANIZER,msg=>{if(token!==cycle)return;try{const d=JSON.parse(msg.body);if(arenaApplyOrganizerGames(d.gameShortInfos)){lastMessage=Date.now();render();status('Live-Daten empfangen',true);}}catch(err){console.warn('Veranstalter-Live-Daten',err);}});subscriptions.set('organizer',[orgSub]);for(const e of events){const id=e.id;const s1=client.subscribe('/topic/public/tournament/game/infos/'+id,msg=>{if(token!==cycle)return;try{const d=JSON.parse(msg.body);if(Array.isArray(d.gameShortInfos)){if(arenaApplyLiveGames(e,d.gameShortInfos,'tournament')){lastMessage=Date.now();render();status('Live-Daten empfangen',true);}}}catch(err){console.warn('Game-Daten',err)}});const s2=client.subscribe('/topic/public/tournament/publicview/'+id,msg=>{if(token!==cycle)return;try{const d=JSON.parse(msg.body);e.data=d;archiveAdd(d);lastMessage=Date.now();render();}catch(err){console.warn('Turnier-Daten',err)}});subscriptions.set(id,[s1,s2]);}render();},()=>{if(token!==cycle)return;connected=false;status('Verbindung unterbrochen',false,true);timer=setTimeout(rejoin,8000);});const original=sock.onclose;sock.onclose=ev=>{if(typeof original==='function')original(ev);if(token===cycle){connected=false;status('Verbindung unterbrochen',false,true);clearTimeout(timer);timer=setTimeout(rejoin,8000);}};}catch(err){status('Verbindung fehlgeschlagen',false,true);timer=setTimeout(rejoin,8000);}}
 async function discover(){try{let active=[];if(manualIds.length){active=manualIds.map((id,i)=>({id,bezeichnung:qs.get('test')==='1'?'Testturnier':`Veranstaltung ${i+1}`,turniersystem:chosen==='single'||chosen==='double'?'LIGASPIELTAG':'SCHWEIZERSYSTEM'}));}else{const res=await fetch(BASE+'/api/public/eventoperator/'+ORGANIZER+'?t='+Date.now(),{cache:'no-store'});if(!res.ok)throw Error('HTTP '+res.status);const d=await res.json();active=Array.isArray(d.allTournamentsStarted)?d.allTournamentsStarted:[];archiveIngest(d);}
 // Keine laufenden Events fallen nicht automatisch auf künftige oder bereits beendete Events zurück.
 const selected=active.filter(x=>x&&x.id).sort((a,b)=>league(a)===league(b)?0:league(a)?-1:1);const key=selected.map(e=>e.id).join('|');if(key!==prevKey){prevKey=key;const old=new Map(events.map(e=>[e.id,e]));events=selected.map(e=>({...e,games:old.get(e.id)?.games||[],data:old.get(e.id)?.data||null,_boardSlots:old.get(e.id)?._boardSlots||[]}));rejoin();for(const ev of events){if(!ev.data)fetch(BASE+'/api/public/tournament/'+ev.id+'?t='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(!d)return;const current=events.find(x=>x.id===ev.id);if(current&&!current.data){current.data=d;archiveAdd(d);render();}}).catch(()=>{});}}else if(!connected&&events.length&&!timer)rejoin();else render();}catch(err){status('Turniersuche nicht erreichbar',false,true);byId('updated').textContent='Turniersuche fehlgeschlagen: '+err.message;render();}}
@@ -1325,7 +1358,7 @@ function arenaLeagueModel(e){
  const players=new Map((m.tournamentPlayerEntities||m.playersSortedByTime||[]).map(p=>[p.id,p]));
  const rows=(d.ranglisteWrapper?.playerStatistiks||[]).map(s=>({...s,p:players.get(s.playerid)})).filter(s=>s.p&&typeof s.p.heimmannschaft==='boolean'&&s.anzahlWuerfeGesamt>0);
  const mode=(m.tournamentModusEntities||[]).find(x=>x.modusTyp==='liga')||{};const needed=Number(mode.firstToLegs)||Math.ceil((Number(mode.bestOfLegs)||5)/2);
- const live=(e.games||[]).filter(g=>g.inGame&&!g.abgeschlossen&&!g.startssoon);
+ const live=visibleGames(e,99);
  const games=[...new Map((m.tournamentLeagueGameEntities||[]).map(g=>[g.id,g])).values()].sort((a,b)=>a.counter-b.counter).map(g=>{
   const a=players.get(g.player1Id),b=players.get(g.player2Id),swap=a?.heimmannschaft===false&&b?.heimmannschaft===true;
   const x=g.anzahlPlayer1,y=g.anzahlPlayer2;const done=x!=null&&y!=null&&x!==y&&Math.max(x,y)>=needed;

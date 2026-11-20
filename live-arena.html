@@ -552,7 +552,7 @@ function effectiveMode(){if(DEMO)return effectiveDemoMode();if(chosen!=='auto')r
 function teamRank(e){
  const n=teamNames(e)[0]||eventName(e);
  const r=n.match(/(?:dart\s*lions(?:\s+gr[aä]fenberg)?)\s+(III|II|I|3|2|1)\b/i);
- if(!r)return 99;
+ if(!r)return /^dart\s*lions\s+gr[aä]fenberg\s*$/i.test(n.trim())?1:99;
  return ({I:1,II:2,III:3,'1':1,'2':2,'3':3})[r[1].toUpperCase()]||99;
 }
 function chosenEvents(){
@@ -646,12 +646,19 @@ function boardNum(name){
  return match?Number(match[1]):null;
 }
 function leagueBoardSlots(e,index){
- const numbers=LIGA_BOARD_ZUORDNUNG[index]||LIGA_BOARD_ZUORDNUNG[0];
  const active=visibleGames(e,99);
- return numbers.map(number=>{
-  const match=active.find(g=>boardNum(g.boardName)===number);
-  return match||placeholder('BOARD '+number);
- });
+ const rank=e?teamRank(e):99;
+ const defaults=LIGA_BOARD_ZUORDNUNG[rank===1?0:rank===2?1:index]||LIGA_BOARD_ZUORDNUNG[0];
+ const numbers=[...new Set(active.map(g=>boardNum(g.boardName)).filter(n=>n!==null))];
+ const pair=numbers.length?LIGA_BOARD_ZUORDNUNG.find(p=>numbers.every(n=>p.includes(n))):null;
+ const slots=pair|| (numbers.length?numbers: (e?._boardSlots?.length?e._boardSlots:defaults));
+ if(e&&numbers.length)e._boardSlots=slots.slice();
+ const seen=new Set();
+ const cards=slots.map(n=>{const g=active.find(x=>boardNum(x.boardName)===n);if(g)seen.add(g);return g||placeholder('BOARD '+n);});
+ // Never suppress a received match because its board name is unexpected.
+ for(const g of active)if(!seen.has(g))cards.push(g);
+ while(cards.length<2)cards.push(placeholder('BOARD FREI'));
+ return cards;
 }
 function placeholder(name){return {placeholder:true,boardName:name};}
 // Gegnerlogos als Originaldateien im GitHub-Ordner "logos/gegner/" hinterlegen.

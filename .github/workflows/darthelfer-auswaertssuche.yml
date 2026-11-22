@@ -2,23 +2,23 @@ name: Darthelfer Auswärtsspiele automatisch suchen
 on:
   workflow_dispatch:
   schedule:
+    - cron: '0 */6 * * 1,2,3,4'
     - cron: '*/30 * * * 5,6,0'
 permissions:
   contents: write
+concurrency:
+  group: darthelfer-away-discovery
+  cancel-in-progress: false
 jobs:
   suchen:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Playwright installieren
-        run: |
-          pip install playwright==1.56.0
-          python -m playwright install --with-deps chromium
-      - name: Darthelfer öffentliche Turniersuche prüfen
+      - name: Darthelfer öffentliche Turniere abrufen und Dart Lions suchen
         run: python discover_darthelfer.py
       - name: Ergebnisdatei veröffentlichen
         run: |
@@ -27,5 +27,6 @@ jobs:
           git add auswaerts-events.json
           if ! git diff --cached --quiet; then
             git commit -m 'Darthelfer: Auswärtsspiel-Fundliste aktualisieren'
+            git pull --rebase origin main
             git push
           fi

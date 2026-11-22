@@ -1,5 +1,15 @@
 {
-  "generated_at": "2026-11-22T07:43:45.843056+00:00",
   "status": "ok",
-  "events": []
+  "events": [
+    {
+      "id": "bd90f4b5-278e-4729-97a6-7ca332dc61cf",
+      "day": "2026-11-21",
+      "opponent": "SV Hetzles II"
+    },
+    {
+      "id": "7e44cddc-f02f-4b56-b645-60e0ba7e333d",
+      "day": "2026-12-05",
+      "opponent": "DJK \"Creek Steelers\" Wimmelbach IV"
+    }
+  ]
 }

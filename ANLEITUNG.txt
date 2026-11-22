@@ -1,0 +1,42 @@
+DART LIONS LIVE-ARENA – AUTOMATISCHE DARTHELFER-AUSWÄRTSSUCHE (TEST)
+22. November 2026
+
+ZIEL
+Mit der öffentlichen Darthelfer-Suche werden alle 30 Minuten an Freitagen,
+Samstagen und Sonntagen auffindbare Ligaspiele gesucht. Nur Begegnungen mit
+Dart Lions Gräfenberg I/II/III, verifiziert durch die jeweiligen öffentlichen
+Turnierdetails, werden in auswaerts-events.json geschrieben. Die Arena liest
+diese Datei und ergänzt damit die bereits funktionierende Auswärtsspiellogik.
+
+DATEIEN UND UPLOAD IM GITHUB-REPOSITORY dart-lions-live-arena
+- live-arena-auswaerts-auto-test.html          im Hauptverzeichnis
+- auswaerts-events.json                       im Hauptverzeichnis
+- scripts/discover_darthelfer.py              in scripts/
+- .github/workflows/darthelfer-auswaertssuche.yml in .github/workflows/
+
+Die produktive live-arena.html NICHT ersetzen.
+
+GITHUB-EINRICHTUNG
+1. Alle vier Dateien (inklusive Unterverzeichnisse) in GitHub hochladen.
+2. Repo Settings -> Actions -> General -> Workflow permissions:
+   Read and write permissions aktivieren, falls für Auto-Commit benötigt.
+3. Actions -> 'Darthelfer Auswärtsspiele automatisch suchen' -> Run workflow
+   manuell einmal starten. Die Ausführung installiert Chromium über Playwright.
+4. Kontrollieren, ob der Workflow erfolgreich ist und ob auswaerts-events.json
+   Einträge enthält. Leere Liste ist kein Beweis, dass es keine Spiele gibt:
+   Die öffentliche Darthelfer-Suche könnte keine Links im HTML bereitstellen.
+5. Die Testarena öffnen:
+   https://drevil0815.github.io/dart-lions-live-arena/live-arena-auswaerts-auto-test.html
+6. Bei Bedarf DevTools Console lesen: 'Darthelfer Auswärtssuche'.
+
+WICHTIGE EINSCHRÄNKUNGEN
+- Das ist ein neuer, noch NICHT im Livebetrieb validierter Suchadapter.
+- Das öffentliche Such-Frontend rendert dynamisch. Ob Chromium bei GitHub die
+  benötigten Links sieht, muss Schritt 3-4 zeigen.
+- Die automatische Trefferprüfung setzt voraus, dass der öffentliche
+  Turnierdatensatz Heimteam, Gastteam und einen erkennbaren Spieltag enthält.
+- 3K ist NICHT angebunden.
+- Ein fehlender Treffer darf nicht als 'Gegner nutzt kein Darthelfer' gelten.
+- Workflow-Schedules sind in GitHub nicht sekundengenau und können ausfallen.
+- Wenn keine Suchergebnisse vorliegen, bleibt die bestehende funktionierende
+  Anzeige von Heim- und zuvor bekannten Auswärtsspielen unverändert.
